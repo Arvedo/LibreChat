@@ -475,16 +475,67 @@ function applyTimezone(value: dayjs.Dayjs, timezone?: string): dayjs.Dayjs {
   }
 }
 
+const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
+  de: 'German (Deutsch)',
+  en: 'English',
+  fr: 'French (Français)',
+  es: 'Spanish (Español)',
+  it: 'Italian (Italiano)',
+  pt: 'Portuguese (Português)',
+  nl: 'Dutch (Nederlands)',
+  pl: 'Polish (Polski)',
+  ru: 'Russian (Русский)',
+  tr: 'Turkish (Türkçe)',
+  ja: 'Japanese (日本語)',
+  zh: 'Chinese (中文)',
+  ko: 'Korean (한국어)',
+  ar: 'Arabic (العربية)',
+};
+
+/**
+ * Resolves a human-readable language label from an `Accept-Language` header
+ * or BCP-47 locale tag (falling back to `navigator.language` in browser
+ * environments and `'English'` when unset).
+ */
+export function resolveUserLanguage(acceptLanguage?: string): string {
+  const rawSource =
+    acceptLanguage ||
+    (typeof navigator !== 'undefined' && typeof navigator.language === 'string'
+      ? navigator.language
+      : '');
+  const primaryTag = rawSource.split(',')[0]?.split(';')[0]?.trim() ?? '';
+  if (!primaryTag) {
+    return 'English';
+  }
+  const baseCode = primaryTag.split(/[-_]/)[0]?.toLowerCase() ?? '';
+  if (baseCode && LANGUAGE_DISPLAY_NAMES[baseCode]) {
+    return LANGUAGE_DISPLAY_NAMES[baseCode];
+  }
+  try {
+    if (typeof Intl !== 'undefined' && typeof Intl.DisplayNames === 'function') {
+      const displayName = new Intl.DisplayNames(['en'], { type: 'language' }).of(baseCode || primaryTag);
+      if (displayName) {
+        return displayName;
+      }
+    }
+  } catch {
+    // Ignore invalid language tags and fall back below
+  }
+  return primaryTag || 'English';
+}
+
 export function replaceSpecialVars({
   text,
   user,
   now: inputNow,
   timezone,
+  acceptLanguage,
 }: {
   text: string;
   user?: t.TUser | null;
   now?: string | number | Date;
   timezone?: string;
+  acceptLanguage?: string;
 }) {
   let result = text;
   if (!result) {
@@ -505,6 +556,11 @@ export function replaceSpecialVars({
 
   if (user && user.name) {
     result = result.replace(/{{\s*current_user\s*}}/gi, user.name);
+  }
+
+  if (/{{\s*user_language\s*}}/i.test(result)) {
+    const languageLabel = resolveUserLanguage(acceptLanguage);
+    result = result.replace(/{{\s*user_language\s*}}/gi, languageLabel);
   }
 
   return result;
