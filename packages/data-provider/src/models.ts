@@ -78,6 +78,14 @@ export type TModelSpec = {
    * agent capability to be enabled by the admin.
    */
   describeIntent?: boolean | string[];
+  /**
+   * Defer loading MCP tool definitions into the initial prompt until discovered
+   * via `tool_search`. `true` defers all MCP tools on the spec; a string array
+   * defers only the named tools or MCP server names (e.g. `['github', 'jira']`
+   * or `['create_issue_mcp_github']`). Requires the `deferred_tools` agent
+   * capability to be enabled by the admin.
+   */
+  deferLoading?: boolean | string[];
   artifacts?: string | boolean;
   mcpServers?: string[];
   skills?: boolean | string[];
@@ -201,6 +209,7 @@ export const tModelSpecSchema = z.object({
   askUserQuestion: z.boolean().optional(),
   runInBackground: z.union([z.boolean(), z.array(z.string())]).optional(),
   describeIntent: z.union([z.boolean(), z.array(z.string())]).optional(),
+  deferLoading: z.union([z.boolean(), z.array(z.string())]).optional(),
   artifacts: z.union([z.string(), z.boolean()]).optional(),
   mcpServers: z.array(z.string()).optional(),
   skills: z.union([z.boolean(), z.array(z.string())]).optional(),

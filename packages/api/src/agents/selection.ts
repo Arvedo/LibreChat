@@ -52,7 +52,7 @@ export const TOOL_SELECTION_WILDCARD = '*';
  */
 export type CapabilityToolNames = ReadonlyMap<string, readonly string[]>;
 
-type SelectionField = 'describe_intent' | 'run_in_background';
+type SelectionField = 'describe_intent' | 'run_in_background' | 'defer_loading';
 
 export interface ResolvedToolOption {
   value: boolean;
@@ -211,4 +211,25 @@ export function mergeSynthesizedToolOptions(
     merged[name] = { ...merged[name], ...options };
   }
   return merged;
+}
+
+const DEFER_LOADING_SELECTION_LABEL = '[deferred_tools] deferLoading';
+
+/**
+ * Records the `defer_loading` selection for ephemeral and model-spec agents.
+ * Supports `true` (defer all MCP tools on the spec/ephemeral agent) or an
+ * array of tool names / MCP server names (e.g. `['github', 'jira']` or
+ * `['create_issue_mcp_github']`).
+ */
+export function synthesizeDeferredToolOptions(sources: {
+  ephemeralAgent?: { defer_loading?: boolean | string[] } | null;
+  modelSpec?: { deferLoading?: boolean | string[] } | null;
+}): AgentToolOptions | undefined {
+  const effectiveSelection = sources.ephemeralAgent?.defer_loading ?? sources.modelSpec?.deferLoading;
+  return synthesizeSelectionToolOptions(
+    'defer_loading',
+    effectiveSelection,
+    sources.ephemeralAgent?.defer_loading === true,
+    DEFER_LOADING_SELECTION_LABEL,
+  );
 }

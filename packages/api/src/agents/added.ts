@@ -18,10 +18,10 @@ import {
   filterChatSelectableMCPServers,
   validateMCPServerConfig,
 } from '~/mcp/utils';
+import { mergeSynthesizedToolOptions, synthesizeDeferredToolOptions } from '~/agents/selection';
 import { ASK_USER_QUESTION_TOOL_NAME } from '~/agents/hitl/askUserQuestionTool';
 import { resolveMCPClientCapabilityProfile } from '~/mcp/capabilities';
 import { synthesizeBackgroundToolOptions } from '~/agents/background';
-import { mergeSynthesizedToolOptions } from '~/agents/selection';
 import { synthesizeIntentToolOptions } from '~/agents/intent';
 import { getCustomEndpointConfig } from '~/app/config';
 
@@ -199,6 +199,16 @@ export async function loadAddedAgent(
         primaryIntentToolOptions,
       );
     }
+    const primaryDeferredToolOptions: AgentToolOptions | undefined = synthesizeDeferredToolOptions({
+      ephemeralAgent,
+      modelSpec,
+    });
+    if (primaryDeferredToolOptions) {
+      result.tool_options = mergeSynthesizedToolOptions(
+        result.tool_options as AgentToolOptions | undefined,
+        primaryDeferredToolOptions,
+      );
+    }
     return result as unknown as Agent;
   }
 
@@ -334,6 +344,16 @@ export async function loadAddedAgent(
     result.tool_options = mergeSynthesizedToolOptions(
       result.tool_options as AgentToolOptions | undefined,
       intentToolOptions,
+    );
+  }
+  const deferredToolOptions: AgentToolOptions | undefined = synthesizeDeferredToolOptions({
+    ephemeralAgent,
+    modelSpec,
+  });
+  if (deferredToolOptions) {
+    result.tool_options = mergeSynthesizedToolOptions(
+      result.tool_options as AgentToolOptions | undefined,
+      deferredToolOptions,
     );
   }
 

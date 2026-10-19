@@ -141,6 +141,12 @@ export type TEphemeralAgent = {
    * `tool_intents` agent capability to be enabled by the admin.
    */
   describe_intent?: boolean;
+  /**
+   * Defer loading MCP tool schemas on this ephemeral agent until discovered
+   * via `tool_search`. Accepts `true` (all MCP tools) or an array of tool/server
+   * names. Requires the `deferred_tools` agent capability.
+   */
+  defer_loading?: boolean | string[];
 };
 
 export type TPayload = Partial<TMessage> &

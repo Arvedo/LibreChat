@@ -128,6 +128,8 @@ export function aliasMCPToolOptions(
 
 /**
  * Builds a tool registry from agent-level tool_options.
+ * Resolves `defer_loading` and `allowed_callers` by checking exact tool name first,
+ * then MCP server name (raw or normalized), and finally the wildcard selection policy (`*`).
  *
  * @param tools - Array of tool definitions
  * @param agentToolOptions - Per-tool configuration from the agent
@@ -142,13 +144,25 @@ export function buildToolRegistryFromAgentOptions(
   for (const tool of tools) {
     const { name, description, parameters } = tool;
     const agentOptions = agentToolOptions[name];
+    const serverOptions = tool.serverName
+      ? (agentToolOptions[tool.serverName] ??
+        agentToolOptions[normalizeServerName(tool.serverName)])
+      : undefined;
+    const wildcardOptions = agentToolOptions['*'];
 
+    const effectiveAllowedCallers =
+      agentOptions?.allowed_callers ??
+      serverOptions?.allowed_callers ??
+      wildcardOptions?.allowed_callers;
     const allowed_callers: AllowedCaller[] =
-      agentOptions?.allowed_callers && agentOptions.allowed_callers.length > 0
-        ? agentOptions.allowed_callers
+      effectiveAllowedCallers && effectiveAllowedCallers.length > 0
+        ? effectiveAllowedCallers
         : ['direct'];
 
-    const defer_loading = agentOptions?.defer_loading === true;
+    const defer_loading =
+      (agentOptions?.defer_loading ??
+        serverOptions?.defer_loading ??
+        wildcardOptions?.defer_loading) === true;
 
     const toolDef: LCTool = {
       name,
