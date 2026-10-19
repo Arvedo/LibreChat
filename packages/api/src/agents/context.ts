@@ -1,6 +1,6 @@
-import { Constants } from 'librechat-data-provider';
+import { Constants, normalizeServerName } from 'librechat-data-provider';
 import { DynamicStructuredTool } from '@librechat/agents/langchain/tools';
-import type { Agent, TEphemeralAgent } from 'librechat-data-provider';
+import type { Agent, AgentToolOptions, TEphemeralAgent } from 'librechat-data-provider';
 import type { LCTool } from '@librechat/agents';
 import type { Logger } from 'winston';
 import type { MCPLookupUser, ParsedServerConfig } from '~/mcp/types';
@@ -17,14 +17,41 @@ export type AgentWithTools = Pick<Agent, 'id'> &
     toolDefinitions?: LCTool[];
   };
 
+function isToolDeferredByOptions(
+  toolName: string,
+  serverName: string | undefined,
+  toolOptions: AgentToolOptions | undefined,
+): boolean {
+  if (!toolOptions) {
+    return false;
+  }
+  const explicit = toolOptions[toolName]?.defer_loading;
+  if (explicit != null) {
+    return explicit === true;
+  }
+  if (serverName) {
+    const serverOpt =
+      toolOptions[serverName]?.defer_loading ??
+      toolOptions[normalizeServerName(serverName)]?.defer_loading;
+    if (serverOpt != null) {
+      return serverOpt === true;
+    }
+  }
+  return toolOptions['*']?.defer_loading === true;
+}
+
 /**
- * Extracts unique MCP server names from an agent's tools or tool definitions.
- * Supports both full tool instances (tools) and serializable definitions (toolDefinitions).
+ * Extracts unique MCP server names from an agent's active (non-deferred) tools or
+ * tool definitions. Tools marked with `defer_loading: true` are excluded so that
+ * MCP servers whose tools are all deferred until `tool_search` discovery do not
+ * inject their server instructions into the initial system prompt.
+ *
  * @param agent - The agent with tools and/or tool definitions
- * @returns Array of unique MCP server names
+ * @returns Array of unique MCP server names with at least one immediately active tool
  */
 export function extractMCPServers(agent: AgentWithTools): string[] {
   const mcpServers = new Set<string>();
+  const toolOptions = agent?.tool_options;
 
   /** Check tool instances (non-event-driven mode) */
   if (agent?.tools?.length) {
@@ -32,7 +59,7 @@ export function extractMCPServers(agent: AgentWithTools): string[] {
       if (tool instanceof DynamicStructuredTool && tool.name.includes(Constants.mcp_delimiter)) {
         const carried = (tool as { mcpRawServerName?: string }).mcpRawServerName;
         const serverName = carried ?? tool.name.split(Constants.mcp_delimiter).pop();
-        if (serverName) {
+        if (serverName && !isToolDeferredByOptions(tool.name, serverName, toolOptions)) {
           mcpServers.add(serverName);
         }
       }
@@ -44,7 +71,10 @@ export function extractMCPServers(agent: AgentWithTools): string[] {
     for (const toolDef of agent.toolDefinitions) {
       if (toolDef.name?.includes(Constants.mcp_delimiter)) {
         const serverName = toolDef.serverName ?? toolDef.name.split(Constants.mcp_delimiter).pop();
-        if (serverName) {
+        const isDeferred =
+          toolDef.defer_loading === true ||
+          isToolDeferredByOptions(toolDef.name, serverName, toolOptions);
+        if (serverName && !isDeferred) {
           mcpServers.add(serverName);
         }
       }
@@ -166,7 +196,13 @@ export async function applyContextToAgent({
   const additionalInstructions = agent.additional_instructions || '';
 
   try {
-    const mcpServers = ephemeralAgent?.mcp?.length ? ephemeralAgent.mcp : extractMCPServers(agent);
+    const hasLoadedTools = Boolean(agent.tools?.length || agent.toolDefinitions?.length);
+    const mcpServers =
+      ephemeralAgent?.mcp?.length && !hasLoadedTools
+        ? ephemeralAgent.mcp.filter(
+            (server) => !isToolDeferredByOptions(server, server, agent.tool_options),
+          )
+        : extractMCPServers(agent);
     const mcpInstructions = await getMCPInstructionsForServers(
       mcpServers,
       mcpManager,
