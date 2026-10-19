@@ -99,40 +99,48 @@ async function buildEndpointOption(req, res, next) {
         ? { ...parsedBody, chatProjectId: rawChatProjectId }
         : parsedBody;
 
-    if (!spec) {
+    const addedEndpoints = appConfig.modelSpecs?.addedEndpoints;
+    const isAddedEndpoint =
+      Array.isArray(addedEndpoints) &&
+      (addedEndpoints.includes(endpoint) ||
+        (endpointType != null && addedEndpoints.includes(endpointType)));
+
+    if (!spec && !isAddedEndpoint) {
       return handleError(res, { text: 'No model spec selected' });
     }
 
-    const modelSpecResolution = resolveModelSpecForEndpoint({
-      modelSpecs: { list },
-      spec,
-      endpoint,
-    });
-    if ('error' in modelSpecResolution) {
-      return handleError(res, {
-        text:
-          modelSpecResolution.error === 'invalid-model-spec'
-            ? 'Invalid model spec'
-            : 'Model spec mismatch',
-      });
-    }
-    const { modelSpec: currentModelSpec } = modelSpecResolution;
-
-    try {
-      const result = applyModelSpecPreset({
-        modelSpec: currentModelSpec,
-        parsedBody: parsedBodyForModelSpec,
+    if (spec) {
+      const modelSpecResolution = resolveModelSpecForEndpoint({
+        modelSpecs: { list },
+        spec,
         endpoint,
-        endpointType,
-        defaultParamsEndpoint,
-        includePresetDefaults: true,
       });
-      parsedBody = result.parsedBody;
-      appliedModelSpecPrivateFields = result.appliedPrivateFields;
-      enforcedModelSpecFields = result.enforcedFields;
-    } catch (error) {
-      logger.error('Error parsing model spec', error);
-      return handleError(res, { text: 'Error parsing model spec' });
+      if ('error' in modelSpecResolution) {
+        return handleError(res, {
+          text:
+            modelSpecResolution.error === 'invalid-model-spec'
+              ? 'Invalid model spec'
+              : 'Model spec mismatch',
+        });
+      }
+      const { modelSpec: currentModelSpec } = modelSpecResolution;
+
+      try {
+        const result = applyModelSpecPreset({
+          modelSpec: currentModelSpec,
+          parsedBody: parsedBodyForModelSpec,
+          endpoint,
+          endpointType,
+          defaultParamsEndpoint,
+          includePresetDefaults: true,
+        });
+        parsedBody = result.parsedBody;
+        appliedModelSpecPrivateFields = result.appliedPrivateFields;
+        enforcedModelSpecFields = result.enforcedFields;
+      } catch (error) {
+        logger.error('Error parsing model spec', error);
+        return handleError(res, { text: 'Error parsing model spec' });
+      }
     }
   } else if (parsedBody.spec && appConfig.modelSpecs?.list) {
     const modelSpecResolution = resolveModelSpecForEndpoint({
