@@ -575,4 +575,74 @@ describe('loadCustomConfig', () => {
       ]);
     });
   });
+
+  describe('applyExtensionManifests', () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    let tempExtDir;
+
+    beforeEach(() => {
+      tempExtDir = fs.mkdtempSync(path.join(os.tmpdir(), 'librechat-ext-test-'));
+      process.env.LIBRECHAT_EXTENSIONS_DIR = tempExtDir;
+    });
+
+    afterEach(() => {
+      delete process.env.LIBRECHAT_EXTENSIONS_DIR;
+      if (tempExtDir && fs.existsSync(tempExtDir)) {
+        fs.rmSync(tempExtDir, { recursive: true, force: true });
+      }
+    });
+
+    it('uses context_length from registry.json when provided and falls back to 262144 when omitted', () => {
+      fs.writeFileSync(
+        path.join(tempExtDir, 'registry.json'),
+        JSON.stringify({
+          model_name: 'CustomTierModel',
+          context_length: 131072,
+          active_extensions: [],
+        }),
+      );
+
+      const rawWithCustomContext = {
+        endpoints: {
+          custom: [
+            {
+              name: 'LocalEndpoint',
+              models: { default: ['base-model'] },
+              tokenConfig: {},
+            },
+          ],
+        },
+      };
+      loadCustomConfig.applyExtensionManifests(rawWithCustomContext);
+      expect(rawWithCustomContext.endpoints.custom[0].tokenConfig.CustomTierModel).toEqual({
+        context: 131072,
+      });
+
+      fs.writeFileSync(
+        path.join(tempExtDir, 'registry.json'),
+        JSON.stringify({
+          model_name: 'DefaultContextModel',
+          active_extensions: [],
+        }),
+      );
+
+      const rawWithDefaultContext = {
+        endpoints: {
+          custom: [
+            {
+              name: 'LocalEndpoint',
+              models: { default: ['base-model'] },
+              tokenConfig: {},
+            },
+          ],
+        },
+      };
+      loadCustomConfig.applyExtensionManifests(rawWithDefaultContext);
+      expect(rawWithDefaultContext.endpoints.custom[0].tokenConfig.DefaultContextModel).toEqual({
+        context: 262144,
+      });
+    });
+  });
 });
