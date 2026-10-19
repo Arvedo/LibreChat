@@ -2331,8 +2331,8 @@ export const endpointSchema = baseEndpointSchema.merge(
     tokenConfig: z
       .record(
         z.object({
-          prompt: z.number(),
-          completion: z.number(),
+          prompt: z.number().optional().default(0),
+          completion: z.number().optional().default(0),
           context: z.number(),
           cacheRead: z.number().optional(),
           cacheWrite: z.number().optional(),
