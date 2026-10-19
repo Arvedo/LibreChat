@@ -457,35 +457,101 @@ export async function loadWebSearchAuth({
         }
       }
 
+      // Self-hosted Firecrawl instances only require `firecrawlApiUrl` and do not
+      // mandate `firecrawlApiKey`. When `firecrawlApiUrl` is configured and no
+      // `firecrawlApiKey` is configured (or its referenced env var is unset),
+      // promote `firecrawlApiUrl` to required and demote `firecrawlApiKey` to optional.
+      if (
+        category === SearchCategories.SCRAPERS &&
+        service === ScraperProviders.FIRECRAWL &&
+        webSearchConfig?.firecrawlApiUrl
+      ) {
+        const rawKeyConfig = webSearchConfig.firecrawlApiKey;
+        const keyEnvVar =
+          typeof rawKeyConfig === 'string' ? extractVariableName(rawKeyConfig) : undefined;
+        const hasConfiguredApiKey =
+          typeof rawKeyConfig === 'string' &&
+          rawKeyConfig.trim() !== '' &&
+          (!keyEnvVar || Boolean(process.env[keyEnvVar]?.trim()));
+        if (!hasConfiguredApiKey) {
+          const keyIdx = requiredKeys.indexOf('firecrawlApiKey');
+          if (keyIdx !== -1) {
+            requiredKeys.splice(keyIdx, 1);
+            optionalKeys.push('firecrawlApiKey');
+          }
+          const urlIdx = optionalKeys.indexOf('firecrawlApiUrl');
+          if (urlIdx !== -1) {
+            optionalKeys.splice(urlIdx, 1);
+            requiredKeys.push('firecrawlApiUrl');
+          }
+        }
+      }
+
       if (requiredKeys.length === 0) continue;
 
-      const requiredAuthFields = extractWebSearchEnvVars({
-        keys: requiredKeys,
-        config: webSearchConfig,
-      });
-      const optionalAuthFields = extractWebSearchEnvVars({
-        keys: optionalKeys,
-        config: webSearchConfig,
-      });
-      if (requiredAuthFields.length !== requiredKeys.length) continue;
+      const literalValues = new Map<TWebSearchKeys, string>();
+      const collectFieldsAndLiterals = (
+        keys: TWebSearchKeys[],
+      ): { fields: string[]; keyOrder: TWebSearchKeys[]; satisfiedCount: number } => {
+        const fields: string[] = [];
+        const keyOrder: TWebSearchKeys[] = [];
+        let satisfiedCount = 0;
+        if (!webSearchConfig) {
+          return { fields, keyOrder, satisfiedCount };
+        }
+        for (const key of keys) {
+          if (!(key in webSearchConfig)) {
+            continue;
+          }
+          const rawValue = webSearchConfig[key];
+          if (typeof rawValue !== 'string') {
+            continue;
+          }
+          const varName = extractVariableName(rawValue);
+          if (varName) {
+            fields.push(varName);
+            keyOrder.push(key);
+            satisfiedCount++;
+          } else {
+            const trimmed = rawValue.trim();
+            if (trimmed !== '' && trimmed !== AuthType.USER_PROVIDED) {
+              literalValues.set(key, trimmed);
+              satisfiedCount++;
+            }
+          }
+        }
+        return { fields, keyOrder, satisfiedCount };
+      };
 
-      const allKeys = [...requiredKeys, ...optionalKeys];
-      const allAuthFields = [...requiredAuthFields, ...optionalAuthFields];
-      const optionalSet = new Set(optionalAuthFields);
+      const requiredResolution = collectFieldsAndLiterals(requiredKeys);
+      const optionalResolution = collectFieldsAndLiterals(optionalKeys);
+      if (requiredResolution.satisfiedCount !== requiredKeys.length) continue;
+
+      const allKeys = [...requiredResolution.keyOrder, ...optionalResolution.keyOrder];
+      const allAuthFields = [...requiredResolution.fields, ...optionalResolution.fields];
+      const optionalSet = new Set(optionalResolution.fields);
 
       try {
-        const authValues = await loadAuthValues({
-          userId,
-          authFields: allAuthFields,
-          optional: optionalSet,
-          throwError,
-        });
+        const authValues =
+          allAuthFields.length > 0
+            ? await loadAuthValues({
+                userId,
+                authFields: allAuthFields,
+                optional: optionalSet,
+                throwError,
+              })
+            : {};
 
         const jinaApiKeyIndex = allKeys.indexOf('jinaApiKey');
         const jinaApiKeyField = allAuthFields[jinaApiKeyIndex];
-        const jinaApiKeyValue = jinaApiKeyField ? authValues[jinaApiKeyField] : undefined;
+        const jinaApiKeyValue =
+          (jinaApiKeyField ? authValues[jinaApiKeyField] : undefined) ??
+          literalValues.get('jinaApiKey');
 
         let allFieldsAuthenticated = true;
+        for (const [literalKey, literalVal] of literalValues.entries()) {
+          authResult[literalKey] = literalVal;
+        }
         for (let j = 0; j < allAuthFields.length; j++) {
           const field = allAuthFields[j];
           const value = authValues[field];
@@ -537,7 +603,7 @@ export async function loadWebSearchAuth({
               continue;
             }
           }
-          if (originalKey) {
+          if (originalKey && value !== undefined) {
             authResult[originalKey] = value;
             contributed = true;
           }
