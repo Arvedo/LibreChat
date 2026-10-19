@@ -682,7 +682,7 @@ export function matchModelName(
  * `pricing` is omitted. Plain `/v1/models` responses without context metadata
  * are rejected so built-in static token maps remain authoritative.
  */
-export const modelSchema = z
+const modelSchema = z
   .object({
     id: z.string(),
     pricing: z
@@ -706,7 +706,18 @@ export const modelSchema = z
     },
   );
 
-export const inputSchema = z.object({
+export interface FetchedModelData {
+  id: string;
+  pricing?: {
+    prompt: string;
+    completion: string;
+  };
+  context_length?: number;
+  max_model_len?: number;
+  max_context_length?: number;
+}
+
+export const inputSchema: z.ZodType<{ data: FetchedModelData[] }> = z.object({
   data: z.array(modelSchema),
 });
 
