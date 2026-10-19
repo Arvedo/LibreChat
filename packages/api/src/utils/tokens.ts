@@ -678,94 +678,48 @@ export function matchModelName(
   return matchedPattern || modelName;
 }
 
-export const modelSchema: z.ZodObject<
-  {
-    id: z.ZodString;
-    pricing: z.ZodObject<
-      {
-        prompt: z.ZodString;
-        completion: z.ZodString;
-      },
-      'strip',
-      z.ZodTypeAny,
-      {
-        prompt: string;
-        completion: string;
-      },
-      {
-        prompt: string;
-        completion: string;
-      }
-    >;
-    context_length: z.ZodNumber;
-  },
-  'strip'
-> = z.object({
-  id: z.string(),
-  pricing: z.object({
-    prompt: z.string(),
-    completion: z.string(),
-  }),
-  context_length: z.number(),
-});
+/**
+ * Schema for OpenAI-compatible `/v1/models` entries that carry context-window
+ * metadata. Supports OpenRouter/Helicone (`context_length` + `pricing`) as well
+ * as local/self-hosted inference servers such as vLLM/SGLang (`max_model_len`)
+ * and LM Studio/llama.cpp (`context_length` or `max_context_length`) where
+ * `pricing` is omitted. Plain `/v1/models` responses without context metadata
+ * are rejected so built-in static token maps remain authoritative.
+ */
+export const modelSchema = z
+  .object({
+    id: z.string(),
+    pricing: z
+      .object({
+        prompt: z.string(),
+        completion: z.string(),
+      })
+      .optional(),
+    context_length: z.number().optional(),
+    max_model_len: z.number().optional(),
+    max_context_length: z.number().optional(),
+  })
+  .refine(
+    (model) =>
+      typeof model.context_length === 'number' ||
+      typeof model.max_model_len === 'number' ||
+      typeof model.max_context_length === 'number',
+    {
+      message:
+        'At least one context length field (context_length, max_model_len, or max_context_length) is required',
+    },
+  );
 
-export const inputSchema: z.ZodObject<
-  {
-    data: z.ZodArray<
-      z.ZodObject<
-        {
-          id: z.ZodString;
-          pricing: z.ZodObject<
-            {
-              prompt: z.ZodString;
-              completion: z.ZodString;
-            },
-            'strip',
-            z.ZodTypeAny,
-            {
-              prompt: string;
-              completion: string;
-            },
-            {
-              prompt: string;
-              completion: string;
-            }
-          >;
-          context_length: z.ZodNumber;
-        },
-        'strip',
-        z.ZodTypeAny,
-        {
-          id: string;
-          pricing: {
-            prompt: string;
-            completion: string;
-          };
-          context_length: number;
-        },
-        {
-          id: string;
-          pricing: {
-            prompt: string;
-            completion: string;
-          };
-          context_length: number;
-        }
-      >,
-      'many'
-    >;
-  },
-  'strip'
-> = z.object({
+export const inputSchema = z.object({
   data: z.array(modelSchema),
 });
 
 /**
  * Processes a list of model data from an API and organizes it into structured data based on URL and specifics of rates and context.
- * @param {{ data: Array<z.infer<typeof modelSchema>> }} input The input object containing base URL and data fetched from the API.
+ * @param {{ data: Array<z.input<typeof modelSchema>> }} input The input object containing base URL and data fetched from the API.
  * @returns {EndpointTokenConfig} The processed model data.
  */
-export function processModelData(input: z.infer<typeof inputSchema>): EndpointTokenConfig {
+export function processModelData(input: z.input<typeof inputSchema>): EndpointTokenConfig {
   const validationResult = inputSchema.safeParse(input);
   if (!validationResult.success) {
     throw new Error('Invalid input data');
@@ -777,19 +731,24 @@ export function processModelData(input: z.infer<typeof inputSchema>): EndpointTo
 
   for (const model of data) {
     const modelKey = model.id;
+    const context = model.context_length ?? model.max_model_len ?? model.max_context_length;
+    if (context == null) {
+      continue;
+    }
+    let pricing = model.pricing;
     if (modelKey === 'openrouter/auto') {
-      model.pricing = {
+      pricing = {
         prompt: '0.00001',
         completion: '0.00003',
       };
     }
-    const prompt = parseFloat(model.pricing.prompt) * 1000000;
-    const completion = parseFloat(model.pricing.completion) * 1000000;
+    const prompt = pricing ? parseFloat(pricing.prompt) * 1000000 : 0;
+    const completion = pricing ? parseFloat(pricing.completion) * 1000000 : 0;
 
     tokenConfig[modelKey] = {
-      prompt,
-      completion,
-      context: model.context_length,
+      prompt: Number.isFinite(prompt) ? prompt : 0,
+      completion: Number.isFinite(completion) ? completion : 0,
+      context,
     };
   }
 

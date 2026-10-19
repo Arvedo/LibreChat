@@ -293,18 +293,14 @@ export async function initializeCustom(
       endpointConfig.tokenConfig as Record<string, Record<string, number>>,
     );
   } else {
-    const cachedConfig =
-      FetchTokenConfig[endpoint.toLowerCase() as keyof typeof FetchTokenConfig] &&
-      (await cache.get(tokenKey));
+    const canFetchTokenConfig =
+      Boolean(FetchTokenConfig[endpoint.toLowerCase() as keyof typeof FetchTokenConfig]) ||
+      Boolean(endpointConfig.models?.fetch);
+    const cachedConfig = canFetchTokenConfig ? await cache.get(tokenKey) : undefined;
     endpointTokenConfig = (cachedConfig as EndpointTokenConfig) || undefined;
   }
 
-  if (
-    FetchTokenConfig[endpoint.toLowerCase() as keyof typeof FetchTokenConfig] &&
-    endpointConfig &&
-    endpointConfig.models?.fetch &&
-    !endpointTokenConfig
-  ) {
+  if (endpointConfig && endpointConfig.models?.fetch && !endpointTokenConfig && !hasTokenConfig) {
     await fetchModels({
       apiKey,
       baseURL,
