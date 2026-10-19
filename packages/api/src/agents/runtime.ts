@@ -14,6 +14,8 @@ export interface AgentExecutionContext {
   user?: IUser;
   appConfig?: AppConfig;
   requestBody: RequestBody;
+  /** Browser `Accept-Language` header used to resolve `{{user_language}}` prompt variables. */
+  acceptLanguage?: string;
   /** Server-captured logical turn start time used by prompt variables. */
   turnStartedAt: number;
   /** Server-captured conversation creation time retained as historical metadata. */
@@ -37,6 +39,7 @@ export function createAgentExecutionContext({
   user,
   appConfig,
   requestBody,
+  acceptLanguage,
   turnStartedAt = Date.now(),
   conversationCreatedAt,
   resolvedConversation,
@@ -50,6 +53,7 @@ export function createAgentExecutionContext({
   user?: IUser;
   appConfig?: AppConfig;
   requestBody: RequestBody;
+  acceptLanguage?: string;
   turnStartedAt?: number;
   conversationCreatedAt?: string;
   resolvedConversation?: Partial<IConversation> | null;
@@ -66,6 +70,7 @@ export function createAgentExecutionContext({
     requestBody,
     turnStartedAt,
     conversationCreatedAt,
+    ...(acceptLanguage !== undefined ? { acceptLanguage } : {}),
     ...(chatProjectContext !== undefined ? { chatProjectContext } : {}),
     ...(chatProjectContextResourcesPromise !== undefined
       ? { chatProjectContextResourcesPromise }
@@ -87,10 +92,14 @@ export function createRequestAgentExecutionContext(
 ): AgentExecutionContext {
   const turnStartedAt = req.turnStartedAt ?? Date.now();
   req.turnStartedAt = turnStartedAt;
+  const rawAcceptLanguage = req.headers?.['accept-language'];
+  const acceptLanguage =
+    typeof rawAcceptLanguage === 'string' ? rawAcceptLanguage : undefined;
   return createAgentExecutionContext({
     user: req.user,
     appConfig: req.config,
     requestBody,
+    acceptLanguage,
     turnStartedAt,
     conversationCreatedAt: req.conversationCreatedAt,
     resolvedConversation: req.resolvedConversation,

@@ -2531,6 +2531,7 @@ export async function initializeAgent(
       user: user ? (user as unknown as TUser) : null,
       now: runtime.turnStartedAt,
       timezone: runtime.requestBody.timezone,
+      acceptLanguage: runtime.acceptLanguage,
     });
     if (hasTemporalSpecialVars(agent.instructions)) {
       agent.instructions = undefined;

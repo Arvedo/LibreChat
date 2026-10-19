@@ -5,6 +5,7 @@ import {
   parseThinkingContent,
   parseCompactConvo,
   replaceSpecialVars,
+  resolveUserLanguage,
   getEphemeralSender,
   getResponseSender,
   isConfiguredSender,
@@ -170,6 +171,39 @@ describe('replaceSpecialVars', () => {
     expect(result).toContain('2024-04-29 12:34:56 -04:00 (Monday)'); // current_datetime
     expect(result).toContain('2024-04-29T16:34:56.000Z'); // iso_datetime
     expect(result).toContain('Test User'); // current_user
+    expect(result).toContain('English'); // user_language
+  });
+
+  test('should replace {{user_language}} using the supplied Accept-Language header', () => {
+    const result = replaceSpecialVars({
+      text: 'Respond in {{user_language}} ({{ USER_LANGUAGE }}).',
+      acceptLanguage: 'de-DE,de;q=0.9,en-US;q=0.8',
+    });
+    expect(result).toBe('Respond in German (Deutsch) (German (Deutsch)).');
+  });
+});
+
+describe('resolveUserLanguage', () => {
+  test.each([
+    ['de-DE,de;q=0.9,en;q=0.8', 'German (Deutsch)'],
+    ['en-US,en;q=0.9', 'English'],
+    ['fr-CA,fr;q=0.8', 'French (Français)'],
+    ['es-ES', 'Spanish (Español)'],
+    ['pt_BR', 'Portuguese (Português)'],
+    ['ja-JP,ja;q=0.9', 'Japanese (日本語)'],
+    ['zh-CN,zh;q=0.9', 'Chinese (中文)'],
+  ])('resolves %s to %s', (header, expected) => {
+    expect(resolveUserLanguage(header)).toBe(expected);
+  });
+
+  test('falls back to Intl.DisplayNames for valid ISO language codes outside the static map', () => {
+    expect(resolveUserLanguage('sv-SE,sv;q=0.9')).toBe('Swedish');
+  });
+
+  test('falls back to English when acceptLanguage is empty or omitted', () => {
+    expect(resolveUserLanguage('')).toBe('English');
+    expect(resolveUserLanguage('   ')).toBe('English');
+    expect(resolveUserLanguage(undefined)).toBe('English');
   });
 });
 
