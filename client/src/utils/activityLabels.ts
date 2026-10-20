@@ -1,6 +1,7 @@
 import { findResponseMessageIndex } from '@librechat/chat';
 import { Constants, ContentTypes } from 'librechat-data-provider';
 import type { TMessage, TActivityLabelEvent, TMessageContentParts } from 'librechat-data-provider';
+import { isInteractiveUserTool } from '~/components/Chat/Messages/Content/AskUserCard';
 import { hasParallelLanes } from '~/utils/lanes';
 
 type ActivityLabelPart = Extract<TMessageContentParts, { type: ContentTypes.ACTIVITY_LABEL }> & {
@@ -192,11 +193,30 @@ const ACTIVITY_BLOCK_TYPES = new Set<string>([
  * a fold too, matching `SUBSTANTIAL_TEXT_CHARS`, so a card cannot swallow an
  * essay. Steers and existing phase markers end one because the server says so.
  */
+function isInteractiveToolPart(part: TMessageContentParts | undefined): boolean {
+  if (part?.type !== ContentTypes.TOOL_CALL) {
+    return false;
+  }
+  const toolCall = part[ContentTypes.TOOL_CALL] as Record<string, unknown> | undefined;
+  if (!toolCall) {
+    return false;
+  }
+  const toolName =
+    (typeof toolCall.name === 'string' ? toolCall.name : '') ||
+    ((toolCall.function as { name?: string } | undefined)?.name ?? '');
+  const toolArgs =
+    toolCall.args ?? (toolCall.function as { arguments?: unknown } | undefined)?.arguments ?? '';
+  return isInteractiveUserTool(toolName, toolArgs);
+}
+
 function isFoldBoundaryPart(part: TMessageContentParts | undefined): boolean {
   if (part == null) {
     return false;
   }
   if (isPhaseActivityLabel(getActivityLabelPart(part))) {
+    return true;
+  }
+  if (isInteractiveToolPart(part)) {
     return true;
   }
   if (part.type === ContentTypes.TEXT) {
@@ -228,6 +248,9 @@ function claimsActivity(part: TMessageContentParts | undefined): boolean {
     return (part as { phase?: string }).phase === 'commentary';
   }
   if (part.type !== ContentTypes.TOOL_CALL) {
+    return false;
+  }
+  if (isInteractiveToolPart(part)) {
     return false;
   }
   const name = (part[ContentTypes.TOOL_CALL] as { name?: string } | undefined)?.name;

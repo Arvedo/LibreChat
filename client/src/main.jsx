@@ -36,3 +36,37 @@ bootstrap().catch((error) => {
     </ApiErrorBoundaryProvider>,
   );
 });
+
+if (typeof window !== 'undefined') {
+  const triggerAssetReload = () => {
+    try {
+      const now = Date.now();
+      const last = Number(sessionStorage.getItem('lc_asset_reload_ts') || '0');
+      if (now - last < 15000) return;
+      sessionStorage.setItem('lc_asset_reload_ts', String(now));
+      if ('caches' in window) {
+        caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).finally(() => window.location.reload());
+      } else {
+        window.location.reload();
+      }
+    } catch {
+      window.location.reload();
+    }
+  };
+  window.addEventListener('vite:preloadError', () => {
+    triggerAssetReload();
+  });
+  window.addEventListener(
+    'error',
+    (e) => {
+      const t = e?.target;
+      if (t && (t.tagName === 'LINK' || t.tagName === 'SCRIPT')) {
+        const url = t.href || t.src || '';
+        if (url.includes('/assets/')) {
+          triggerAssetReload();
+        }
+      }
+    },
+    true,
+  );
+}

@@ -600,7 +600,40 @@ const renderAssistantsToolCall: PartRenderers['parts'][ContentTypes.TOOL_CALL] =
 
 /** The app's part renderers: every visual the package `Part` routes to. */
 const renderers: PartRenderers = {
-  claim: ({ part }) => {
+  claim: ({ part, isSubmitting, attachments, hideAttachments }) => {
+    if (part.type === ContentTypes.TOOL_CALL) {
+      const toolCall = part[ContentTypes.TOOL_CALL] as
+        | {
+            id?: string;
+            name?: string;
+            args?: string | Record<string, unknown>;
+            output?: string | null;
+            function?: {
+              name?: string;
+              arguments?: string | Record<string, unknown>;
+              output?: string | null;
+            };
+          }
+        | undefined;
+      if (toolCall) {
+        const name = toolCall.name || toolCall.function?.name || '';
+        const args = toolCall.args ?? toolCall.function?.arguments ?? '';
+        const output = toolCall.output ?? toolCall.function?.output ?? '';
+        if (isInteractiveUserTool(name, args)) {
+          return (
+            <AskUserCard
+              toolCallId={toolCall.id || ''}
+              name={name}
+              args={args}
+              output={output}
+              isSubmitting={isSubmitting}
+              attachments={attachments}
+              hideAttachments={hideAttachments}
+            />
+          );
+        }
+      }
+    }
     const askUserQuestion = getAskUserQuestionPart(part);
     if (!askUserQuestion) {
       return undefined;

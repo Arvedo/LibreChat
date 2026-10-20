@@ -35,7 +35,12 @@ export function getBaseToolName(rawName?: string): string {
   if (!rawName) return '';
   const idx = rawName.indexOf(Constants.mcp_delimiter);
   if (idx >= 0) {
-    return rawName.slice(0, idx);
+    const prefix = rawName.slice(0, idx);
+    const server = rawName.slice(idx + Constants.mcp_delimiter.length);
+    if (server === 'youtrack' && (prefix === 'create_issue' || prefix === 'update_issue')) {
+      return `youtrack_${prefix}`;
+    }
+    return prefix;
   }
   return rawName;
 }

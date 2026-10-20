@@ -29,6 +29,15 @@ export function hasPendingApprovalInPart(part: TMessageContentParts): boolean {
   if (toolCall.approval != null && (toolCall.output?.length ?? 0) === 0) {
     return true;
   }
+  const toolName =
+    toolCall.name ||
+    ((toolCall as unknown as { function?: { name?: string } })?.function?.name ?? '');
+  const toolArgs =
+    (toolCall as { args?: unknown }).args ??
+    ((toolCall as unknown as { function?: { arguments?: unknown } })?.function?.arguments ?? '');
+  if (isInteractiveUserTool(toolName, toolArgs) && (toolCall.output?.length ?? 0) === 0) {
+    return true;
+  }
   return (
     Array.isArray(toolCall.subagent_content) &&
     toolCall.subagent_content.some(hasPendingApprovalInPart)
