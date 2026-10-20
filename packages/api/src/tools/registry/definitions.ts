@@ -290,9 +290,21 @@ export const webScraperSchema: ExtendedJsonSchema = {
 export const condenseContextSchema: ExtendedJsonSchema = {
   type: 'object',
   properties: {
+    text: {
+      type: 'string',
+      description: 'Der lange Text oder die gesammelten Informationen, die komprimiert werden sollen.',
+    },
     summary: {
       type: 'string',
       description: 'Strukturierte Zusammenfassung der wichtigsten Fakten, Entscheidungen und Zwischenergebnisse.',
+    },
+    context_percent: {
+      type: 'number',
+      description: 'Aktuelle Schätzung der Kontextfenster-Auslastung in Prozent (0-100).',
+    },
+    focus: {
+      type: 'string',
+      description: 'Optionaler Fokus: Welche Fakten, Zahlen oder Themen müssen unbedingt erhalten bleiben?',
     },
     focus_topic: {
       type: 'string',
@@ -303,8 +315,16 @@ export const condenseContextSchema: ExtendedJsonSchema = {
       items: { type: 'string' },
       description: 'Optionale Liste noch offener Aufgaben.',
     },
+    mode: {
+      type: 'string',
+      enum: ['bullet_points', 'key_facts', 'brief_summary'],
+      description: 'Darstellungsform: "bullet_points", "key_facts" oder "brief_summary".',
+    },
+    target_ratio: {
+      type: 'number',
+      description: 'Ziel-Kompressionsrate (Standard: 0.3).',
+    },
   },
-  required: ['summary'],
 };
 
 export const fileCreatorSchema: ExtendedJsonSchema = {

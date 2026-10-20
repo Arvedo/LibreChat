@@ -11,11 +11,18 @@ class CondenseContextTool extends Tool {
   schema = z.object({
     text: z
       .string()
+      .optional()
       .describe('Der lange Text oder die gesammelten Informationen, die komprimiert werden sollen.'),
+    summary: z
+      .string()
+      .optional()
+      .describe('Strukturierte Zusammenfassung der wichtigsten Fakten, Entscheidungen und Zwischenergebnisse.'),
     context_percent: z
       .number()
       .min(0)
       .max(100)
+      .optional()
+      .default(35)
       .describe(
         'Deine aktuelle Schätzung der Kontextfenster-Auslastung in Prozent (0-100). Muss mindestens 33 betragen, damit das Tool ausgeführt wird!',
       ),
@@ -23,6 +30,14 @@ class CondenseContextTool extends Tool {
       .string()
       .optional()
       .describe('Optionaler Fokus: Welche Fakten, Zahlen oder Themen müssen unbedingt erhalten bleiben?'),
+    focus_topic: z
+      .string()
+      .optional()
+      .describe('Optionaler Fokus für den weiteren Gesprächsverlauf.'),
+    open_tasks: z
+      .array(z.string())
+      .optional()
+      .describe('Optionale Liste noch offener Aufgaben.'),
     mode: z
       .enum(['bullet_points', 'key_facts', 'brief_summary'])
       .optional()
@@ -46,12 +61,19 @@ class CondenseContextTool extends Tool {
 
   async _call(input) {
     try {
+      const textToCondense = input.text || input.summary || '';
+      const focusTopic = input.focus || input.focus_topic || null;
+      const contextPercent = input.context_percent !== undefined ? input.context_percent : 35;
+
       const response = await axios.post(
         `${this.baseUrl}/api/web-tools/condense`,
         {
-          text: input.text,
-          context_percent: input.context_percent ?? 0,
-          focus: input.focus || null,
+          text: textToCondense,
+          summary: input.summary || null,
+          context_percent: contextPercent,
+          focus: focusTopic,
+          focus_topic: focusTopic,
+          open_tasks: input.open_tasks || null,
           mode: input.mode || 'bullet_points',
           target_ratio: input.target_ratio || 0.3,
         },

@@ -120,10 +120,13 @@ class FileCreatorTool extends Tool {
       const data = response.data;
       let output = '';
 
+      const execTime = typeof data.execution_time_ms === 'number' ? `${data.execution_time_ms} ms` : '';
+      const execTimeStr = execTime ? ` (${execTime})` : '';
       if (data.success) {
-        output += `✅ **Code erfolgreich ausgeführt** (${data.execution_time_ms} ms)\n\n`;
+        output += `✅ **Code erfolgreich ausgeführt**${execTimeStr}\n\n`;
       } else {
-        output += `❌ **Fehler bei der Code-Ausführung** (Exit-Code: ${data.exit_code}, ${data.execution_time_ms} ms)\n\n`;
+        const exitCode = data.exit_code !== undefined ? data.exit_code : 1;
+        output += `❌ **Fehler bei der Code-Ausführung** (Exit-Code: ${exitCode}${execTimeStr ? `, ${execTime}` : ''})\n\n`;
       }
 
       if (data.stdout && data.stdout.trim()) {
@@ -139,12 +142,14 @@ class FileCreatorTool extends Tool {
         output += `WICHTIG: Kopiere die folgenden Markdown-Download-Links EXAKT und UNVERÄNDERT in deine Antwort an den Benutzer, damit der Benutzer die Dateien herunterladen oder die Bilder direkt sehen kann:\n\n`;
         const imageExts = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']);
         for (const f of data.files) {
-          const sizeKb = (f.size_bytes / 1024).toFixed(1);
+          const downloadUrl = f.download_url || f.url || (f.filename ? `/images/generated/${f.filename}` : '#');
+          const sizeBytes = typeof f.size_bytes === 'number' ? f.size_bytes : (typeof f.bytes === 'number' ? f.bytes : 0);
+          const sizeKb = (sizeBytes / 1024).toFixed(1);
           const ext = path.extname(f.filename || '').toLowerCase();
           if (imageExts.has(ext)) {
-            output += `- ![${f.filename}](${f.download_url})\n  [📥 ${f.filename} herunterladen (${sizeKb} KB)](${f.download_url})\n`;
+            output += `- ![${f.filename}](${downloadUrl})\n  [📥 ${f.filename} herunterladen (${sizeKb} KB)](${downloadUrl})\n`;
           } else {
-            output += `- [📥 ${f.filename} herunterladen (${sizeKb} KB)](${f.download_url})\n`;
+            output += `- [📥 ${f.filename} herunterladen (${sizeKb} KB)](${downloadUrl})\n`;
           }
         }
       } else if (data.success && (!data.stdout || !data.stdout.trim())) {
