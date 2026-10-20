@@ -1,11 +1,14 @@
 import React, { useRef, useMemo, useState, useCallback } from 'react';
-import { SharePointIcon } from '@librechat/client';
+import { SharePointIcon, useToastContext } from '@librechat/client';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import {
+  Search,
   FileSearch,
   ImageUpIcon,
+  ExternalLink,
   FileType2Icon,
   FileImageIcon,
+  FolderArchive,
   TerminalSquareIcon,
 } from 'lucide-react';
 import {
@@ -26,9 +29,16 @@ import type {
   MimeUploadCapability,
 } from 'librechat-data-provider';
 import type { SharePointFile } from '~/data-provider/Files/sharepoint';
+import type { SaveDestination } from '~/components/Chat/Input/Files/SaveToSuiteModal';
 import type { ExtendedFile, FileSetter } from '~/common';
+import {
+  uploadToSuite,
+  setLastUsedDataset,
+  uploadToLatestChatUploads,
+} from '~/data-provider/documentSuite';
 import { useSharePointFileHandlingNoChatContext } from '~/hooks/Files/useSharePointFileHandling';
 import { useAgentToolPermissions, useAgentCapabilities, useGetAgentsConfig } from '~/hooks';
+import useExtensionFeatures from '~/hooks/Nav/useExtensionFeatures';
 import { useFileHandlingNoChatContext } from '~/hooks/Files';
 import { useGetStartupConfig } from '~/data-provider';
 import { getUploadToolAllowances } from '~/utils';
@@ -43,7 +53,6 @@ type FileUploadType =
   | 'image_document_video_audio'
   | 'image_document_video_audio_configured';
 
-/** What each provider upload path can actually send, used to scope the picker filter to selectable files. */
 const fileTypeCapabilities: Record<FileUploadType, MimeUploadCapability> = {
   image: { categories: ['image'] },
   document: { categories: ['document'] },
@@ -52,12 +61,10 @@ const fileTypeCapabilities: Record<FileUploadType, MimeUploadCapability> = {
     categories: ['image', 'document'],
     documentMimeTypes: bedrockDocumentMimeTypes,
   },
-  /** Google/Vertex/OpenRouter media path: documents are limited to PDF (see isProviderAttachType). */
   image_document_video_audio: {
     categories: ['image', 'document', 'audio', 'video'],
     documentMimeTypes: ['application/pdf'],
   },
-  /** An explicit custom-endpoint allowlist decides which media the picker can offer. */
   image_document_video_audio_configured: {
     categories: ['image', 'document', 'audio', 'video'],
   },
@@ -67,16 +74,12 @@ export interface AttachEntry {
   id: string;
   label: string;
   icon: React.ReactNode;
-  /** Sending the file to the model, which is what nearly every upload means.
-   *  The rest go to a tool and are folded away behind a disclosure. */
   primary?: boolean;
   onSelect: () => void;
 }
 
 export interface UseAttachItems {
   entries: AttachEntry[];
-  /** The picker lives outside the popover, so selecting a file cannot race it
-   *  unmounting; the caller mounts it. */
   inputRef: React.RefObject<HTMLInputElement>;
   onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   isSharePointDialogOpen: boolean;
@@ -85,6 +88,16 @@ export interface UseAttachItems {
   isProcessing: boolean;
   downloadProgress: ReturnType<typeof useSharePointFileHandlingNoChatContext>['downloadProgress'];
   maxSelectionCount: number | undefined;
+  uploadAndSaveInputRef?: React.RefObject<HTMLInputElement>;
+  onUploadAndSaveChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  isSaveModalOpen?: boolean;
+  setIsSaveModalOpen?: React.Dispatch<React.SetStateAction<boolean>>;
+  pendingSaveFiles?: File[];
+  setPendingSaveFiles?: React.Dispatch<React.SetStateAction<File[]>>;
+  onSaveModalConfirm?: (destination: SaveDestination) => Promise<void>;
+  isSearchOpen?: boolean;
+  setIsSearchOpen?: React.Dispatch<React.SetStateAction<boolean>>;
+  onSuiteFilesSelected?: (selectedFiles: File[]) => Promise<void>;
 }
 
 interface UseAttachItemsParams {
@@ -92,7 +105,6 @@ interface UseAttachItemsParams {
   endpoint?: string | null;
   endpointType?: EModelEndpoint | string;
   endpointFileConfig?: EndpointFileConfig;
-  /** Resolved unified mode hides tool destinations behind the implicit uploader. */
   isUnifiedMode?: boolean;
   useResponsesApi?: boolean;
   conversationId: string;
@@ -102,15 +114,6 @@ interface UseAttachItemsParams {
   setFilesLoading: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-/**
- * The attach half of the composer palette, extracted from the old
- * `AttachFileMenu` so the palette can render upload destinations as ordinary
- * searchable rows alongside tools, skills and MCP servers.
- *
- * Returns the entries plus the hidden file input and SharePoint dialog state
- * the caller must mount: the picker has to live in the DOM outside the
- * popover so selecting a file does not race the popover unmounting.
- */
 export default function useAttachItems({
   agentId,
   endpoint,
@@ -125,17 +128,19 @@ export default function useAttachItems({
   setFilesLoading,
 }: UseAttachItemsParams): UseAttachItems {
   const localize = useLocalize();
+  const { showToast } = useToastContext();
+  const { documentSuite } = useExtensionFeatures();
   const inputRef = useRef<HTMLInputElement>(null);
-  /* The local picker reads this at event time, where a ref is the only thing
-     fast enough: the change event can arrive before React has committed. The
-     SharePoint dialog reads it during render, which a ref cannot serve, so the
-     same choice is mirrored into state for it. */
+  const uploadAndSaveInputRef = useRef<HTMLInputElement>(null);
   const toolResourceRef = useRef<EToolResources | undefined>();
   const [sharePointResource, setSharePointResource] = useState<EToolResources | undefined>();
   const [isSharePointDialogOpen, setIsSharePointDialogOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [pendingSaveFiles, setPendingSaveFiles] = useState<File[]>([]);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [, setEphemeralAgent] = useRecoilState(ephemeralAgentByConvoId(conversationId));
 
-  const { handleFileChange } = useFileHandlingNoChatContext(undefined, {
+  const { handleFileChange, handleFiles } = useFileHandlingNoChatContext(undefined, {
     files,
     setFiles,
     setFilesLoading,
@@ -152,22 +157,62 @@ export default function useAttachItems({
   const { data: startupConfig } = useGetStartupConfig();
   const sharePointEnabled = startupConfig?.sharePointFilePickerEnabled;
 
-  /** TODO: Ephemeral Agent Capabilities
-   * Allow defining agent capabilities on a per-endpoint basis
-   * Use definition for agents endpoint for ephemeral agents
-   * */
-  /* Destructured rather than held whole: the hook returns a fresh object every
-     render, and depending on it rebuilt every destination, every icon and every
-     closure below on each keystroke. */
   const { contextEnabled, fileSearchEnabled, codeEnabled } = useAgentCapabilities(
     agentsConfig?.capabilities ?? defaultAgentCapabilities,
   );
   const { tools, provider } = useAgentToolPermissions(agentId, ephemeralAgent);
-  /* The same allowances the drag-and-drop router resolves, so a file reaches
-     the same destinations whether it is dropped on the composer or picked
-     through this menu. Passing no ephemeral agent here used to leave both tool
-     destinations permanently hidden in an ordinary chat. */
   const { fileSearchAllowedByAgent, codeAllowedByAgent } = getUploadToolAllowances(agentId, tools);
+
+  const routeSuiteFiles = useCallback(
+    async (fileList: File[], saveToSuite?: SaveDestination) => {
+      if (fileList.length === 0) {
+        return;
+      }
+      const imageFiles = fileList.filter((f) => /^image\//.test(f.type));
+      const docFiles = fileList.filter((f) => !/^image\//.test(f.type));
+
+      if (imageFiles.length > 0) {
+        await handleFiles(imageFiles);
+      }
+      if (docFiles.length > 0) {
+        setEphemeralAgent((prev) => ({
+          ...prev,
+          [EToolResources.execute_code]: true,
+        }));
+        await handleFiles(docFiles, EToolResources.execute_code);
+      }
+
+      if (saveToSuite?.datasetId) {
+        const { datasetId, datasetTitle } = saveToSuite;
+        setLastUsedDataset({ id: datasetId, title: datasetTitle });
+        showToast({
+          message: localize('com_ds_saving_toast'),
+          status: 'info',
+          duration: 3000,
+        });
+        (async () => {
+          for (const file of fileList) {
+            try {
+              await uploadToSuite(file, datasetId);
+              showToast({
+                message: localize('com_ds_saved_toast', { filename: file.name }),
+                status: 'success',
+                duration: 4000,
+              });
+            } catch (err) {
+              console.error('[DocumentSuite] Upload error:', err);
+              showToast({
+                message: localize('com_ds_save_error_toast', { filename: file.name }),
+                status: 'error',
+                duration: 5000,
+              });
+            }
+          }
+        })();
+      }
+    },
+    [handleFiles, setEphemeralAgent, showToast, localize],
+  );
 
   const handleUploadClick = useCallback(
     (fileType?: FileUploadType) => {
@@ -209,11 +254,47 @@ export default function useAttachItems({
       setSharePointResource(value);
     };
 
+    const appendDocSuiteEntries = (target: AttachEntry[]) => {
+      if (!documentSuite) {
+        return target;
+      }
+      target.push(
+        {
+          id: 'doc_suite:upload_save',
+          label: localize('com_ds_upload_save'),
+          primary: true,
+          icon: <FolderArchive className="icon-md text-emerald-500" aria-hidden="true" />,
+          onSelect: () => {
+            if (uploadAndSaveInputRef.current) {
+              uploadAndSaveInputRef.current.value = '';
+              uploadAndSaveInputRef.current.click();
+            }
+          },
+        },
+        {
+          id: 'doc_suite:search',
+          label: localize('com_ds_search_docs'),
+          primary: true,
+          icon: <Search className="icon-md text-blue-500" aria-hidden="true" />,
+          onSelect: () => {
+            setIsSearchOpen(true);
+          },
+        },
+        {
+          id: 'doc_suite:go_to_suite',
+          label: `${localize('com_ds_go_to_suite')} ↗`,
+          primary: true,
+          icon: <ExternalLink className="icon-md text-amber-500" aria-hidden="true" />,
+          onSelect: () => {
+            window.open('/document-processor/', '_blank', 'noopener,noreferrer');
+          },
+        },
+      );
+      return target;
+    };
+
     const build = (onAction: (fileType?: FileUploadType) => void, prefix: string) => {
       const items: AttachEntry[] = [];
-      /* Unified mode keeps the destination implicit and exposes only the
-         available sources, so the palette never routes a source through a
-         legacy tool resource. */
       if (isUnifiedMode) {
         items.push({
           id: `${prefix}:unified`,
@@ -239,10 +320,6 @@ export default function useAttachItems({
         });
         return items;
       }
-      /* Assistants own their own file handling: whatever the assistant is
-         configured to accept goes up unfiltered, and none of the tool
-         destinations below apply. Scoping this to the image capability, as the
-         provider check would, silently dropped PDF support. */
       if (isAssistantsEndpoint(endpoint)) {
         items.push({
           id: `${prefix}:assistants`,
@@ -259,7 +336,6 @@ export default function useAttachItems({
 
       let currentProvider = provider || endpoint;
 
-      // This will be removed in a future PR to formally normalize Providers comparisons to be case insensitive
       if (currentProvider?.toLowerCase() === Providers.OPENROUTER) {
         currentProvider = Providers.OPENROUTER;
       }
@@ -353,32 +429,24 @@ export default function useAttachItems({
     };
 
     const local = build(handleUploadClick, 'local');
-    if (!sharePointEnabled) {
-      return local;
+    if (sharePointEnabled) {
+      for (const item of build(() => setIsSharePointDialogOpen(true), 'sharepoint')) {
+        local.push({
+          ...item,
+          primary: isUnifiedMode ? item.primary : false,
+          label: isUnifiedMode
+            ? item.label
+            : `${item.label} (${localize('com_files_upload_sharepoint')})`,
+          icon: <SharePointIcon className="icon-md" aria-hidden="true" />,
+        });
+      }
     }
-    /* SharePoint mirrors every local destination; the tool resource is set by
-       the row itself, then the picker dialog takes over from the input. */
-    for (const item of build(() => setIsSharePointDialogOpen(true), 'sharepoint')) {
-      local.push({
-        ...item,
-        /* Legacy mode folds SharePoint behind the local destination; unified
-           mode keeps both source rows visible in the palette. */
-        primary: isUnifiedMode ? item.primary : false,
-        label: isUnifiedMode
-          ? item.label
-          : `${item.label} (${localize('com_files_upload_sharepoint')})`,
-        icon: <SharePointIcon className="icon-md" aria-hidden="true" />,
-      });
-    }
-    return local;
+    return appendDocSuiteEntries(local);
   }, [
     localize,
     endpoint,
     provider,
     endpointType,
-    /* Read inside `onSelect` (line 294): a config change that alters the
-       explicit MIME allowlist has to rebuild these rows, or the click still
-       requests the previous upload type. */
     endpointFileConfig?.supportedMimeTypes,
     codeEnabled,
     contextEnabled,
@@ -390,14 +458,54 @@ export default function useAttachItems({
     sharePointEnabled,
     codeAllowedByAgent,
     fileSearchAllowedByAgent,
+    documentSuite,
   ]);
 
   const onFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selected = e.target.files ? Array.from(e.target.files) : [];
       handleFileChange(e, toolResourceRef.current);
       toolResourceRef.current = undefined;
+      if (documentSuite && selected.length > 0) {
+        (async () => {
+          for (const file of selected) {
+            try {
+              await uploadToLatestChatUploads(file);
+            } catch {
+              // Silent background sync
+            }
+          }
+        })();
+      }
     },
-    [handleFileChange],
+    [handleFileChange, documentSuite],
+  );
+
+  const onUploadAndSaveChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const fileList = Array.from(e.target.files);
+      setPendingSaveFiles(fileList);
+      setIsSaveModalOpen(true);
+      e.target.value = '';
+    }
+  }, []);
+
+  const onSaveModalConfirm = useCallback(
+    async (destination: SaveDestination) => {
+      if (pendingSaveFiles.length > 0) {
+        const toProcess = [...pendingSaveFiles];
+        setPendingSaveFiles([]);
+        await routeSuiteFiles(toProcess, destination);
+      }
+    },
+    [pendingSaveFiles, routeSuiteFiles],
+  );
+
+  const onSuiteFilesSelected = useCallback(
+    async (selectedFiles: File[]) => {
+      await routeSuiteFiles(selectedFiles);
+    },
+    [routeSuiteFiles],
   );
 
   const onSharePointFilesSelected = useCallback(
@@ -422,5 +530,15 @@ export default function useAttachItems({
     isProcessing,
     downloadProgress,
     maxSelectionCount: endpointFileConfig?.fileLimit,
+    uploadAndSaveInputRef,
+    onUploadAndSaveChange,
+    isSaveModalOpen,
+    setIsSaveModalOpen,
+    pendingSaveFiles,
+    setPendingSaveFiles,
+    onSaveModalConfirm,
+    isSearchOpen,
+    setIsSearchOpen,
+    onSuiteFilesSelected,
   };
 }

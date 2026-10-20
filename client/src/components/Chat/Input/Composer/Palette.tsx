@@ -23,6 +23,8 @@ import type { AttachEntry } from '~/hooks/Input/useAttachItems';
 import type { ExtendedFile, FileSetter } from '~/common';
 import type { CatalogSection } from './Catalog';
 import type { TranslationKeys } from '~/hooks';
+import DocumentSuiteSearchDialog from '~/components/Chat/Input/Files/DocumentSuiteSearchDialog';
+import SaveToSuiteModal from '~/components/Chat/Input/Files/SaveToSuiteModal';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
 import { SharePointPickerDialog } from '~/components/SharePoint';
 import useReducedMotion from '~/hooks/Generic/useReducedMotion';
@@ -1400,6 +1402,33 @@ function Palette({
         downloadProgress={attach.downloadProgress}
         maxSelectionCount={attach.maxSelectionCount}
       />
+      {attach.uploadAndSaveInputRef != null && (
+        <input
+          ref={attach.uploadAndSaveInputRef}
+          type="file"
+          multiple
+          style={{ display: 'none' }}
+          onChange={attach.onUploadAndSaveChange}
+        />
+      )}
+      {attach.isSaveModalOpen != null && attach.onSaveModalConfirm != null && (
+        <SaveToSuiteModal
+          files={attach.pendingSaveFiles ?? []}
+          isVisible={attach.isSaveModalOpen}
+          onClose={() => {
+            attach.setIsSaveModalOpen?.(false);
+            attach.setPendingSaveFiles?.([]);
+          }}
+          onConfirm={attach.onSaveModalConfirm}
+        />
+      )}
+      {attach.isSearchOpen != null && attach.onSuiteFilesSelected != null && (
+        <DocumentSuiteSearchDialog
+          isVisible={attach.isSearchOpen}
+          onClose={() => attach.setIsSearchOpen?.(false)}
+          onFilesSelected={attach.onSuiteFilesSelected}
+        />
+      )}
       <Catalog
         section={catalog}
         onClose={() => setCatalog(null)}

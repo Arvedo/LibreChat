@@ -6,6 +6,7 @@ import type { NavLink } from '~/common';
 import { useShortcutAriaKey, useShortcutHint } from '~/hooks/useKeyboardShortcuts';
 import { useActivePanel, resolveActivePanel, DEFAULT_PANEL } from '~/Providers';
 import AgentMarketplaceButton from '~/components/Nav/AgentMarketplaceButton';
+import ExtensionNavButtons from '~/components/Nav/ExtensionNavButtons';
 import { CLOSE_SIDEBAR_ID } from '~/components/Chat/Menus/OpenSidebar';
 import useNewChat from '~/hooks/Conversations/useNewChat';
 import { lazyWithRecovery } from '~/lib/assets/lazy';
@@ -188,6 +189,7 @@ function ExpandedPanel({
             onLeaveInsights={isInsightsRoute ? onLeaveInsights : undefined}
           />
         ))}
+        <ExtensionNavButtons />
       </div>
 
       <div className="mt-auto">
