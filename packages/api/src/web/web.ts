@@ -1,4 +1,4 @@
-import { logger, webSearchAuth, webSearchKeys, webSearchSelectionFields } from '@librechat/data-schemas';
+import { webSearchAuth, webSearchKeys, webSearchSelectionFields } from '@librechat/data-schemas';
 import {
   AuthType,
   RerankerTypes,
@@ -457,55 +457,49 @@ export async function loadWebSearchAuth({
         }
       }
 
-      const literalValues = new Map<TWebSearchKeys, string>();
-      const fieldToKeyMap = new Map<string, TWebSearchKeys>();
-
-      // Self-hosted Firecrawl instances require `firecrawlApiUrl` and mandate a non-empty API key header.
-      // Empty keys must never be accepted, but when no key is explicitly configured (or its
-      // referenced env var is unset/empty), default firecrawlApiKey to 'dummy-key'.
+      // Self-hosted Firecrawl instances only require `firecrawlApiUrl` and do not
+      // mandate `firecrawlApiKey`. When `firecrawlApiUrl` is configured and no
+      // `firecrawlApiKey` is configured (or its referenced env var is unset),
+      // promote `firecrawlApiUrl` to required and demote `firecrawlApiKey` to optional.
       if (
         category === SearchCategories.SCRAPERS &&
         service === ScraperProviders.FIRECRAWL &&
         webSearchConfig?.firecrawlApiUrl
       ) {
-        const urlIdx = optionalKeys.indexOf('firecrawlApiUrl');
-        if (urlIdx !== -1) {
-          optionalKeys.splice(urlIdx, 1);
-          requiredKeys.push('firecrawlApiUrl');
-        }
-
         const rawKeyConfig = webSearchConfig.firecrawlApiKey;
         const keyEnvVar =
           typeof rawKeyConfig === 'string' ? extractVariableName(rawKeyConfig) : undefined;
-        const isExplicitEmpty =
-          typeof rawKeyConfig === 'string' && !keyEnvVar && rawKeyConfig.trim() === '';
-
         const hasConfiguredApiKey =
           typeof rawKeyConfig === 'string' &&
           rawKeyConfig.trim() !== '' &&
-          rawKeyConfig.trim() !== AuthType.USER_PROVIDED &&
           (!keyEnvVar || Boolean(process.env[keyEnvVar]?.trim()));
-
-        if (!hasConfiguredApiKey && !isExplicitEmpty) {
-          literalValues.set('firecrawlApiKey', 'dummy-key');
+        if (!hasConfiguredApiKey) {
+          const keyIdx = requiredKeys.indexOf('firecrawlApiKey');
+          if (keyIdx !== -1) {
+            requiredKeys.splice(keyIdx, 1);
+            optionalKeys.push('firecrawlApiKey');
+          }
+          const urlIdx = optionalKeys.indexOf('firecrawlApiUrl');
+          if (urlIdx !== -1) {
+            optionalKeys.splice(urlIdx, 1);
+            requiredKeys.push('firecrawlApiUrl');
+          }
         }
       }
 
       if (requiredKeys.length === 0) continue;
 
+      const literalValues = new Map<TWebSearchKeys, string>();
       const collectFieldsAndLiterals = (
         keys: TWebSearchKeys[],
-      ): { fields: string[]; satisfiedCount: number } => {
+      ): { fields: string[]; keyOrder: TWebSearchKeys[]; satisfiedCount: number } => {
         const fields: string[] = [];
+        const keyOrder: TWebSearchKeys[] = [];
         let satisfiedCount = 0;
         if (!webSearchConfig) {
-          return { fields, satisfiedCount };
+          return { fields, keyOrder, satisfiedCount };
         }
         for (const key of keys) {
-          if (literalValues.has(key)) {
-            satisfiedCount++;
-            continue;
-          }
           if (!(key in webSearchConfig)) {
             continue;
           }
@@ -516,7 +510,7 @@ export async function loadWebSearchAuth({
           const varName = extractVariableName(rawValue);
           if (varName) {
             fields.push(varName);
-            fieldToKeyMap.set(varName, key);
+            keyOrder.push(key);
             satisfiedCount++;
           } else {
             const trimmed = rawValue.trim();
@@ -526,13 +520,14 @@ export async function loadWebSearchAuth({
             }
           }
         }
-        return { fields, satisfiedCount };
+        return { fields, keyOrder, satisfiedCount };
       };
 
       const requiredResolution = collectFieldsAndLiterals(requiredKeys);
       const optionalResolution = collectFieldsAndLiterals(optionalKeys);
       if (requiredResolution.satisfiedCount !== requiredKeys.length) continue;
 
+      const allKeys = [...requiredResolution.keyOrder, ...optionalResolution.keyOrder];
       const allAuthFields = [...requiredResolution.fields, ...optionalResolution.fields];
       const optionalSet = new Set(optionalResolution.fields);
 
@@ -547,7 +542,8 @@ export async function loadWebSearchAuth({
               })
             : {};
 
-        const jinaApiKeyField = [...fieldToKeyMap.entries()].find(([, k]) => k === 'jinaApiKey')?.[0];
+        const jinaApiKeyIndex = allKeys.indexOf('jinaApiKey');
+        const jinaApiKeyField = allAuthFields[jinaApiKeyIndex];
         const jinaApiKeyValue =
           (jinaApiKeyField ? authValues[jinaApiKeyField] : undefined) ??
           literalValues.get('jinaApiKey');
@@ -559,7 +555,7 @@ export async function loadWebSearchAuth({
         for (let j = 0; j < allAuthFields.length; j++) {
           const field = allAuthFields[j];
           const value = authValues[field];
-          const originalKey = fieldToKeyMap.get(field);
+          const originalKey = allKeys[j];
 
           if (!optionalSet.has(field) && !value) {
             allFieldsAuthenticated = false;
@@ -597,9 +593,7 @@ export async function loadWebSearchAuth({
 
           if (isUserProvidedUrlKey && isFieldUserProvided) {
             const apiKey = USER_PROVIDED_URL_KEYS.get(originalKey);
-            const apiKeyField = apiKey
-              ? [...fieldToKeyMap.entries()].find(([, k]) => k === apiKey)?.[0]
-              : undefined;
+            const apiKeyField = apiKey ? allAuthFields[allKeys.indexOf(apiKey)] : undefined;
             const apiKeyValue = apiKeyField ? authValues[apiKeyField] : undefined;
             if (apiKeyField && apiKeyValue && process.env[apiKeyField] === apiKeyValue) {
               if (!optionalSet.has(field)) {
@@ -617,12 +611,6 @@ export async function loadWebSearchAuth({
           if (!isUserProvided && isFieldUserProvided && contributed) {
             isUserProvided = true;
           }
-        }
-
-        if (authResult.firecrawlApiKey === 'dummy-key') {
-          logger.warn(
-            '[loadWebSearchAuth] `firecrawlApiKey` is currently set to the default "dummy-key". If your Firecrawl instance requires authentication, replace it with a valid API key.',
-          );
         }
 
         if (jinaApiKeyValue && authResult.jinaApiUrl == null) {
