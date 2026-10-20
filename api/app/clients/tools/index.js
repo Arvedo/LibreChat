@@ -12,6 +12,15 @@ const TraversaalSearch = require('./structured/TraversaalSearch');
 const createOpenAIImageTools = require('./structured/OpenAIImageTools');
 const TavilySearchResults = require('./structured/TavilySearchResults');
 const createGeminiImageTool = require('./structured/GeminiImageGen');
+const CronJobTool = require('./structured/CronJobTool');
+const ToolCatalogTool = require('./structured/ToolCatalogTool');
+const FileCreatorTool = require('./structured/FileCreatorTool');
+const WebScraperTool = require('./structured/WebScraperTool');
+const SearxngSearchTool = require('./structured/SearxngSearchTool');
+const CondenseContextTool = require('./structured/CondenseContextTool');
+const AgentCreatorTool = require('./structured/AgentCreatorTool');
+const FileReaderTool = require('./structured/FileReaderTool');
+const AskUserTool = require('./structured/AskUserTool');
 
 module.exports = {
   ...manifest,
@@ -27,4 +36,13 @@ module.exports = {
   TavilySearchResults,
   createOpenAIImageTools,
   createGeminiImageTool,
+  CronJobTool,
+  ToolCatalogTool,
+  FileCreatorTool,
+  WebScraperTool,
+  SearxngSearchTool,
+  CondenseContextTool,
+  AgentCreatorTool,
+  FileReaderTool,
+  AskUserTool,
 };

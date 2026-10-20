@@ -5,6 +5,7 @@ import { NativeTypes } from 'react-dnd-html5-backend';
 import { isAssistantsEndpoint } from 'librechat-data-provider';
 import type { DropTargetMonitor } from 'react-dnd';
 import { useChatContext } from '~/Providers/ChatContext';
+import useExtensionFeatures from '~/hooks/Nav/useExtensionFeatures';
 import useFileUploadRouter from './useFileUploadRouter';
 import { useUploadModalContext } from '~/Providers';
 import useUploadOptions from './useUploadOptions';
@@ -14,6 +15,7 @@ export default function useDragHelpers() {
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const { conversation } = useChatContext();
+  const { documentSuite } = useExtensionFeatures();
 
   const isAssistants = useMemo(
     () => isAssistantsEndpoint(conversation?.endpoint),
@@ -33,6 +35,7 @@ export default function useDragHelpers() {
   const routeFilesRef = useRef(routeFiles);
   const openModalRef = useRef(openModal);
   const isAssistantsRef = useRef(isAssistants);
+  const documentSuiteRef = useRef(documentSuite);
 
   conversationRef.current = conversation;
   getOptionsRef.current = getOptions;
@@ -42,6 +45,7 @@ export default function useDragHelpers() {
   routeFilesRef.current = routeFiles;
   openModalRef.current = openModal;
   isAssistantsRef.current = isAssistants;
+  documentSuiteRef.current = documentSuite;
 
   const handleDrop = useCallback(
     (item: { files: File[] }) => {
@@ -63,6 +67,11 @@ export default function useDragHelpers() {
       /** Assistants do not use the upload-option flow */
       if (isAssistantsRef.current) {
         routeFilesRef.current(item.files);
+        return;
+      }
+
+      if (documentSuiteRef.current) {
+        openModalRef.current(item.files);
         return;
       }
 

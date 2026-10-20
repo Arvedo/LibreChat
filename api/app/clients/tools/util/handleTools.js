@@ -58,6 +58,15 @@ const {
   TavilySearchResults,
   createGeminiImageTool,
   createOpenAIImageTools,
+  CronJobTool,
+  ToolCatalogTool,
+  FileCreatorTool,
+  WebScraperTool,
+  SearxngSearchTool,
+  CondenseContextTool,
+  AgentCreatorTool,
+  FileReaderTool,
+  AskUserTool,
 } = require('../');
 const {
   createMCPTool,
@@ -160,6 +169,18 @@ const loadTools = async ({
     'azure-ai-search': StructuredACS,
     traversaal_search: TraversaalSearch,
     tavily_search_results_json: TavilySearchResults,
+    cron_scheduler: CronJobTool,
+    cron_job: CronJobTool,
+    tool_catalog: ToolCatalogTool,
+    auto_tool: ToolCatalogTool,
+    file_creator: FileCreatorTool,
+    web_scraper: WebScraperTool,
+    searxng_search: SearxngSearchTool,
+    condense_context: CondenseContextTool,
+    agent_creator: AgentCreatorTool,
+    create_agent: AgentCreatorTool,
+    read_file: FileReaderTool,
+    ask_user: AskUserTool,
   };
 
   const customConstructors = {
@@ -242,6 +263,11 @@ const loadTools = async ({
     dalle: imageGenOptions,
     'stable-diffusion': imageGenOptions,
     gemini_image_gen: imageGenOptions,
+    file_creator: { agentId: agent?.id },
+    read_file: { agentId: agent?.id },
+    cron_job: { name: 'cron_job' },
+    auto_tool: { name: 'auto_tool' },
+    create_agent: { name: 'create_agent' },
   };
 
   /** @type {Record<string, string>} */
@@ -320,6 +346,15 @@ const loadTools = async ({
     }
 
     if (tool === Tools.execute_code) {
+      if (agent?.tools?.includes('file_creator')) {
+        requestedTools[tool] = async () =>
+          new FileCreatorTool({
+            name: 'execute_code',
+            userId: user,
+            agentId: agent?.id,
+          });
+        continue;
+      }
       requestedTools[tool] = async () => {
         const codeExecutionContext =
           options.codeExecutionContext ??

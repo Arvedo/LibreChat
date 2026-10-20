@@ -180,5 +180,89 @@
         "optional": true
       }
     ]
+  },
+  {
+    "name": "Cron Scheduler",
+    "pluginKey": "cron_scheduler",
+    "description": "Erstellt, listet, aktualisiert und löscht wiederkehrende Hintergrund-Automatisierungen (Cron-Jobs).",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "Cron Job",
+    "pluginKey": "cron_job",
+    "description": "Erstellt, listet, aktualisiert und löscht wiederkehrende Hintergrund-Automatisierungen (Cron-Jobs).",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "Tool Catalog",
+    "pluginKey": "tool_catalog",
+    "description": "Durchsucht verfügbare Werkzeuge und gibt passende Tool-Empfehlungen zurück.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "Auto Tool",
+    "pluginKey": "auto_tool",
+    "description": "Durchsucht verfügbare Werkzeuge und gibt passende Tool-Empfehlungen zurück.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "File Creator",
+    "pluginKey": "file_creator",
+    "description": "Führt Python 3 Code in einer isolierten Sandbox aus für Berechnungen, Datenanalysen und Dateierstellung.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "Web Scraper",
+    "pluginKey": "web_scraper",
+    "description": "Liest den vollständigen Textinhalt einer Webseite oder URL aus.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "SearXNG Search",
+    "pluginKey": "searxng_search",
+    "description": "Durchsucht das Internet über SearXNG nach aktuellen Informationen.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "Condense Context",
+    "pluginKey": "condense_context",
+    "description": "Fasst den bisherigen Gesprächskontext strukturiert zusammen.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "Agent Creator",
+    "pluginKey": "agent_creator",
+    "description": "Erstellt, listet, aktualisiert und löscht KI-Agenten.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "Create Agent",
+    "pluginKey": "create_agent",
+    "description": "Erstellt, listet, aktualisiert und löscht KI-Agenten.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "Read File",
+    "pluginKey": "read_file",
+    "description": "Liest hochgeladene Dokumente (PDF, DOCX, XLSX, PPTX, TXT, CSV, Bilder mit OCR) im Chat-Workspace.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
+    "name": "Ask User",
+    "pluginKey": "ask_user",
+    "description": "Stellt dem Nutzer eine interaktive Rückfrage mit klickbaren Antwortoptionen im Chat.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
   }
 ]

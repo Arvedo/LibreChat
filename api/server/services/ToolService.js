@@ -2214,7 +2214,11 @@ async function loadToolsForExecution({
     isWorkspaceListRequested;
   const isSkillToolRequested = toolNames.includes(AgentConstants.SKILL_TOOL);
   const isSandboxFileToolRequested = toolNames.some((name) =>
-    [AgentConstants.READ_FILE, CREATE_FILE_TOOL_NAME, EDIT_FILE_TOOL_NAME].includes(name),
+    [
+      ...(agent?.tools?.includes('read_file') ? [] : [AgentConstants.READ_FILE]),
+      CREATE_FILE_TOOL_NAME,
+      EDIT_FILE_TOOL_NAME,
+    ].includes(name),
   );
 
   let enabledCapabilities;
@@ -2432,7 +2436,7 @@ async function loadToolsForExecution({
     AgentConstants.BASH_PROGRAMMATIC_TOOL_CALLING,
     AgentConstants.BASH_TOOL,
     AgentConstants.SKILL_TOOL,
-    AgentConstants.READ_FILE,
+    ...(agent?.tools?.includes('read_file') ? [] : [AgentConstants.READ_FILE]),
     ...fileAuthoringToolNames,
   ]);
 
@@ -2450,7 +2454,7 @@ async function loadToolsForExecution({
 
   const requestedNonSpecialToolNames = toolNames.filter((name) => !specialToolNames.has(name));
   const allowedNonSpecialToolNames = requestedNonSpecialToolNames.filter((name) => {
-    if (name !== Tools.execute_code) {
+    if (name !== Tools.execute_code || agent?.tools?.includes('file_creator')) {
       return true;
     }
     const allowed = codeExecutionEnabled && toolRegistry?.has(Tools.execute_code) === true;

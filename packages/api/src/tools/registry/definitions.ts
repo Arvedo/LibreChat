@@ -249,6 +249,226 @@ export const traversaalSearchSchema: ExtendedJsonSchema = {
   required: ['query'],
 };
 
+export const searxngSearchSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    query: {
+      type: 'string',
+      description: 'Suchbegriff oder Suchanfrage für die Websuche.',
+    },
+    max_results: {
+      type: 'number',
+      description: 'Maximale Anzahl der Suchergebnisse (1-20, Standard: 8).',
+    },
+    categories: {
+      type: 'string',
+      description: 'Optionale Suchkategorie, z.B. general, news, science, it.',
+    },
+    language: {
+      type: 'string',
+      description: 'Sprachcode für Suchergebnisse, z.B. de-DE oder en-US.',
+    },
+  },
+  required: ['query'],
+};
+
+export const webScraperSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    url: {
+      type: 'string',
+      description: 'Die vollständige URL (http:// oder https://) der abzurufenden Webseite.',
+    },
+    max_chars: {
+      type: 'number',
+      description: 'Maximale Zeichenanzahl des extrahierten Textes (Standard: 20000).',
+    },
+  },
+  required: ['url'],
+};
+
+export const condenseContextSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    summary: {
+      type: 'string',
+      description: 'Strukturierte Zusammenfassung der wichtigsten Fakten, Entscheidungen und Zwischenergebnisse.',
+    },
+    focus_topic: {
+      type: 'string',
+      description: 'Optionaler Fokus für den weiteren Gesprächsverlauf.',
+    },
+    open_tasks: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Optionale Liste noch offener Aufgaben.',
+    },
+  },
+  required: ['summary'],
+};
+
+export const fileCreatorSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    code: {
+      type: 'string',
+      description:
+        'Vollständiger, ausführbarer Python 3 Code. Speichere zu erstellende Dateien im aktuellen Arbeitsverzeichnis (/mnt/data).',
+    },
+    timeout: {
+      type: 'number',
+      description: 'Optionales Timeout in Sekunden (1-180, Standard: 60).',
+    },
+  },
+  required: ['code'],
+};
+
+export const agentCreatorSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['list', 'create', 'update', 'delete'],
+      description: 'Auszuführende Aktion: list, create, update oder delete.',
+    },
+    agent_id: {
+      type: 'string',
+      description: 'ID des Agenten (erforderlich bei update und delete).',
+    },
+    name: {
+      type: 'string',
+      description: 'Name des Agenten (erforderlich bei create).',
+    },
+    description: {
+      type: 'string',
+      description: 'Kurzbeschreibung des Agenten.',
+    },
+    instructions: {
+      type: 'string',
+      description: 'Systemprompt / Anweisungen für den Agenten.',
+    },
+    model: {
+      type: 'string',
+      description: 'Optionaler Modellname.',
+    },
+    tools: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Optionale Liste von Tool-Namen für den Agenten.',
+    },
+  },
+  required: ['action'],
+};
+
+export const fileReaderSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['list', 'read', 'grep'],
+      description: 'Aktion: list (Dateien auflisten), read (Dateiinhalt lesen), grep (Begriff suchen).',
+    },
+    filename: {
+      type: 'string',
+      description: 'Name der zu lesenden oder zu durchsuchenden Datei.',
+    },
+    query: {
+      type: 'string',
+      description: 'Suchbegriff oder Regex-Muster bei action="grep".',
+    },
+    start_char: {
+      type: 'number',
+      description: 'Startzeichen-Offset beim Lesen großer Dateien (Standard: 0).',
+    },
+    max_chars: {
+      type: 'number',
+      description: 'Maximale Zeichenanzahl beim Lesen (Standard: 25000).',
+    },
+  },
+  required: [],
+};
+
+export const toolCatalogSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['list', 'search', 'recommend'],
+      description: 'Aktion: list (alle Tools), search (Stichwortsuche), recommend (Empfehlung für Aufgabe).',
+    },
+    query: {
+      type: 'string',
+      description: 'Suchbegriff oder Aufgabenbeschreibung.',
+    },
+  },
+  required: [],
+};
+
+export const askUserSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    title: {
+      type: 'string',
+      description: 'Kurzer Titel des Dialogs im Chat.',
+    },
+    question: {
+      type: 'string',
+      description: 'Die Frage oder Bitte um Bestätigung an den Nutzer.',
+    },
+    options: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Liste von klickbaren Antwortoptionen.',
+    },
+    allow_custom: {
+      type: 'boolean',
+      description: 'Ob der Nutzer auch eine eigene Freitextantwort eingeben darf (Standard: true).',
+    },
+    details: {
+      type: 'object',
+      additionalProperties: { type: 'string' },
+      description: 'Optionale Schlüssel-Wert-Details zur Anzeige im Dialog.',
+    },
+  },
+  required: ['question'],
+};
+
+export const cronSchedulerSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    action: {
+      type: 'string',
+      enum: ['list', 'create', 'update', 'delete', 'toggle', 'run'],
+      description: 'Aktion: list, create, update, delete, toggle oder run.',
+    },
+    job_id: {
+      type: 'string',
+      description: 'ID des Cron-Jobs (für update, delete, toggle, run).',
+    },
+    name: {
+      type: 'string',
+      description: 'Name des Cron-Jobs.',
+    },
+    cron_expression: {
+      type: 'string',
+      description: '5-teiliger Cron-Ausdruck (z.B. "0 8 * * 1-5").',
+    },
+    prompt: {
+      type: 'string',
+      description: 'Die Aufgabe/Anweisung, die bei Ausführung abgearbeitet werden soll.',
+    },
+    agent_id: {
+      type: 'string',
+      description: 'Optionale Agent-ID für die Ausführung.',
+    },
+    enabled: {
+      type: 'boolean',
+      description: 'Ob der Job aktiv ist (Standard: true).',
+    },
+  },
+  required: ['action'],
+};
+
 /** Tavily Search Results tool JSON schema */
 export const tavilySearchSchema: ExtendedJsonSchema = {
   type: 'object',
@@ -425,6 +645,90 @@ export const toolDefinitions: Record<string, ToolRegistryDefinition> = {
     schema: geminiToolkit.gemini_image_gen.schema,
     toolType: 'builtin',
     responseFormat: geminiToolkit.gemini_image_gen.responseFormat,
+  },
+  searxng_search: {
+    name: 'searxng_search',
+    description:
+      'Durchsucht das Internet über SearXNG nach aktuellen Informationen, Nachrichten, Fakten und Webseiten.',
+    schema: searxngSearchSchema,
+    toolType: 'builtin',
+  },
+  web_scraper: {
+    name: 'web_scraper',
+    description:
+      'Liest den vollständigen Textinhalt einer Webseite oder URL aus und bereinigt HTML-Tags.',
+    schema: webScraperSchema,
+    toolType: 'builtin',
+  },
+  condense_context: {
+    name: 'condense_context',
+    description:
+      'Fasst den bisherigen Gesprächskontext strukturiert zusammen, um wichtige Ergebnisse, Fakten und offene Punkte bei langen Sitzungen festzuhalten.',
+    schema: condenseContextSchema,
+    toolType: 'builtin',
+  },
+  file_creator: {
+    name: 'file_creator',
+    description:
+      'Führt Python 3 Code in einer isolierten Sandbox aus für exakte Berechnungen, Datenanalysen (pandas, openpyxl), Diagramme (matplotlib), OCR und die Erstellung von Dateien (PDF, DOCX, XLSX, PPTX, CSV, ZIP).',
+    schema: fileCreatorSchema,
+    toolType: 'builtin',
+  },
+  agent_creator: {
+    name: 'agent_creator',
+    description:
+      'Erstellt, listet, aktualisiert und löscht spezialisierte KI-Agenten mit eigenen Systemprompts und Werkzeugen.',
+    schema: agentCreatorSchema,
+    toolType: 'builtin',
+  },
+  create_agent: {
+    name: 'create_agent',
+    description:
+      'Erstellt, listet, aktualisiert und löscht spezialisierte KI-Agenten mit eigenen Systemprompts und Werkzeugen.',
+    schema: agentCreatorSchema,
+    toolType: 'builtin',
+  },
+  read_file: {
+    name: 'read_file',
+    description:
+      'Liest und durchsucht hochgeladene Dokumente (PDF, DOCX, XLSX, PPTX, TXT, CSV, Bilder mit OCR) im Chat-Workspace.',
+    schema: fileReaderSchema,
+    toolType: 'builtin',
+  },
+  tool_catalog: {
+    name: 'tool_catalog',
+    description:
+      'Durchsucht alle im System verfügbaren Werkzeuge (Tools & Plugins) und gibt Beschreibungen sowie Empfehlungen zurück.',
+    schema: toolCatalogSchema,
+    toolType: 'builtin',
+  },
+  auto_tool: {
+    name: 'auto_tool',
+    description:
+      'Durchsucht alle im System verfügbaren Werkzeuge (Tools & Plugins) und gibt Beschreibungen sowie Empfehlungen zurück.',
+    schema: toolCatalogSchema,
+    toolType: 'builtin',
+  },
+  ask_user: {
+    name: 'ask_user',
+    description:
+      'Stellt dem Nutzer eine interaktive Rückfrage mit klickbaren Antwortoptionen im Chat und wartet auf die Auswahl.',
+    schema: askUserSchema,
+    toolType: 'builtin',
+  },
+  cron_scheduler: {
+    name: 'cron_scheduler',
+    description:
+      'Verwaltet zeitgesteuerte Hintergrund-Aufgaben (Cron-Jobs): Auflisten, Erstellen, Aktualisieren, Aktivieren/Deaktivieren und Löschen.',
+    schema: cronSchedulerSchema,
+    toolType: 'builtin',
+  },
+  cron_job: {
+    name: 'cron_job',
+    description:
+      'Verwaltet zeitgesteuerte Hintergrund-Aufgaben (Cron-Jobs): Auflisten, Erstellen, Aktualisieren, Aktivieren/Deaktivieren und Löschen.',
+    schema: cronSchedulerSchema,
+    toolType: 'builtin',
   },
 };
 

@@ -1307,10 +1307,52 @@ function createToolInstance({
 
   const normalizedToolKey = `${toolName}${Constants.mcp_delimiter}${normalizeServerName(serverName)}`;
 
+  const coerceMcpToolInput = (args, jsonSchema) => {
+    if (!args || typeof args !== 'object' || Array.isArray(args)) {
+      return args;
+    }
+    const props = jsonSchema?.properties || {};
+    const out = { ...args };
+    for (const [k, v] of Object.entries(out)) {
+      if (v === null) {
+        delete out[k];
+        continue;
+      }
+      const propSchema = props[k];
+      if (!propSchema) {
+        continue;
+      }
+      const propType = Array.isArray(propSchema.type) ? propSchema.type[0] : propSchema.type;
+      if ((propType === 'number' || propType === 'integer') && typeof v === 'string' && v.trim() !== '') {
+        const num = Number(v);
+        if (!Number.isNaN(num)) {
+          out[k] = num;
+        }
+      } else if (propType === 'boolean' && typeof v === 'string') {
+        if (v.toLowerCase() === 'true') {
+          out[k] = true;
+        } else if (v.toLowerCase() === 'false') {
+          out[k] = false;
+        }
+      }
+    }
+    return out;
+  };
+
   /** @type {(toolArguments: Object | string, config?: GraphRunnableConfig) => Promise<unknown>} */
-  const _call = async (toolArguments, config) => {
+  const _call = async (rawToolArguments, config) => {
     const effectiveUser = config?.configurable?.user ?? capturedUser;
     const permissionUser = effectiveUser;
+    let toolArguments = coerceMcpToolInput(rawToolArguments, schema);
+    if (
+      toolArguments &&
+      typeof toolArguments === 'object' &&
+      schema?.properties?.user_email &&
+      !toolArguments.user_email &&
+      effectiveUser?.email
+    ) {
+      toolArguments = { ...toolArguments, user_email: effectiveUser.email };
+    }
     /** @type {string | undefined} */
     let userId;
 
@@ -1361,6 +1403,50 @@ function createToolInstance({
 
       const customUserVars =
         config?.configurable?.userMCPAuthMap?.[`${Constants.mcp_prefix}${serverName}`];
+
+      const GATED_MCP_TOOLS = new Set([
+        'youtrack_create_issue',
+        'youtrack_update_issue',
+        'coding_task',
+        'code_change',
+      ]);
+      if (GATED_MCP_TOOLS.has(serverToolName)) {
+        try {
+          const axios = require('axios');
+          const pluginsApiUrl = process.env.PLUGINS_API_URL || 'http://plugins_api:8000';
+          const details = {};
+          if (toolArguments && typeof toolArguments === 'object') {
+            for (const [k, v] of Object.entries(toolArguments)) {
+              if (k !== 'user_email' && v !== undefined && v !== null && String(v).trim() !== '') {
+                details[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+              }
+            }
+          }
+          const approveRes = await axios.post(
+            `${pluginsApiUrl}/api/user-input/wait`,
+            {
+              user_id: String(userId || 'default'),
+              title: `Freigabe erforderlich: ${serverToolName}`,
+              question: `Soll die Aktion "${serverToolName}" mit den folgenden Parametern ausgeführt werden?`,
+              options: ['Ja, jetzt ausführen', 'Nein, abbrechen'],
+              allow_custom: true,
+              details,
+              timeout: 240,
+            },
+            { timeout: 250000 },
+          );
+          const answer = String(approveRes.data?.answer || '').trim();
+          if (
+            approveRes.data?.status !== 'answered' ||
+            answer.toLowerCase().startsWith('nein') ||
+            answer.toLowerCase().includes('abbrechen')
+          ) {
+            return `Aktion "${serverToolName}" wurde vom Nutzer abgelehnt oder abgebrochen (${answer || 'Timeout'}).`;
+          }
+        } catch (gateErr) {
+          logger.warn(`[MCP] Approval gate skipped or failed for ${serverToolName}: ${gateErr?.message}`);
+        }
+      }
 
       /**
        * The upstream-token closure is built at the request boundary (where

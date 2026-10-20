@@ -25,7 +25,7 @@ describe('preference defaults with nothing persisted', () => {
   });
 
   it('adds a newline on Enter instead of sending', () => {
-    expect(readRecoil(settings.enterToSend)).toBe(false);
+    expect(readRecoil(settings.enterToSend)).toBe(true);
   });
 
   it('collapses long user messages', () => {

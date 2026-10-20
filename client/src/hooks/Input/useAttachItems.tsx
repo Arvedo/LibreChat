@@ -2,6 +2,7 @@ import React, { useRef, useMemo, useState, useCallback } from 'react';
 import { SharePointIcon, useToastContext } from '@librechat/client';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import {
+  Upload,
   Search,
   FileSearch,
   ImageUpIcon,
@@ -164,7 +165,11 @@ export default function useAttachItems({
   const { fileSearchAllowedByAgent, codeAllowedByAgent } = getUploadToolAllowances(agentId, tools);
 
   const routeSuiteFiles = useCallback(
-    async (fileList: File[], saveToSuite?: SaveDestination) => {
+    async (
+      fileList: File[],
+      saveToSuite?: SaveDestination,
+      options?: { skipLatestSync?: boolean },
+    ) => {
       if (fileList.length === 0) {
         return;
       }
@@ -180,6 +185,32 @@ export default function useAttachItems({
           [EToolResources.execute_code]: true,
         }));
         await handleFiles(docFiles, EToolResources.execute_code);
+        setTimeout(() => {
+          const textarea =
+            document.querySelector<HTMLTextAreaElement>('[data-testid="text-input"]') ??
+            (document.getElementById('prompt-textarea') as HTMLTextAreaElement | null);
+          if (!textarea) {
+            return;
+          }
+          const existing = textarea.value;
+          const prefix = docFiles
+            .filter((f) => !existing.includes(f.name))
+            .map((f) => `[Dokument hinzugefügt: "${f.name}"]`)
+            .join(' ');
+          if (!prefix) {
+            return;
+          }
+          const newVal = existing.trim() ? `${prefix} ${existing}` : `${prefix} `;
+          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype,
+            'value',
+          )?.set;
+          if (nativeInputValueSetter) {
+            nativeInputValueSetter.call(textarea, newVal);
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }, 150);
       }
 
       if (saveToSuite?.datasetId) {
@@ -209,9 +240,19 @@ export default function useAttachItems({
             }
           }
         })();
+      } else if (!options?.skipLatestSync && documentSuite) {
+        (async () => {
+          for (const file of fileList) {
+            try {
+              await uploadToLatestChatUploads(file);
+            } catch {
+              // Silent background sync
+            }
+          }
+        })();
       }
     },
-    [handleFiles, setEphemeralAgent, showToast, localize],
+    [handleFiles, setEphemeralAgent, showToast, localize, documentSuite],
   );
 
   const handleUploadClick = useCallback(
@@ -254,11 +295,18 @@ export default function useAttachItems({
       setSharePointResource(value);
     };
 
-    const appendDocSuiteEntries = (target: AttachEntry[]) => {
-      if (!documentSuite) {
-        return target;
-      }
-      target.push(
+    if (documentSuite) {
+      return [
+        {
+          id: 'local:upload',
+          label: localize('com_ds_upload'),
+          primary: true,
+          icon: <Upload className="icon-md" aria-hidden="true" />,
+          onSelect: () => {
+            setToolResource(undefined);
+            handleUploadClick();
+          },
+        },
         {
           id: 'doc_suite:upload_save',
           label: localize('com_ds_upload_save'),
@@ -289,9 +337,8 @@ export default function useAttachItems({
             window.open('/document-processor/', '_blank', 'noopener,noreferrer');
           },
         },
-      );
-      return target;
-    };
+      ];
+    }
 
     const build = (onAction: (fileType?: FileUploadType) => void, prefix: string) => {
       const items: AttachEntry[] = [];
@@ -441,7 +488,7 @@ export default function useAttachItems({
         });
       }
     }
-    return appendDocSuiteEntries(local);
+    return local;
   }, [
     localize,
     endpoint,
@@ -464,8 +511,18 @@ export default function useAttachItems({
   const onFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const selected = e.target.files ? Array.from(e.target.files) : [];
-      handleFileChange(e, toolResourceRef.current);
+      const currentResource = toolResourceRef.current;
       toolResourceRef.current = undefined;
+      if (
+        currentResource == null &&
+        selected.length > 0 &&
+        (documentSuite || selected.some((f) => !/^image\//.test(f.type)))
+      ) {
+        e.target.value = '';
+        void routeSuiteFiles(selected);
+        return;
+      }
+      handleFileChange(e, currentResource);
       if (documentSuite && selected.length > 0) {
         (async () => {
           for (const file of selected) {
@@ -478,7 +535,7 @@ export default function useAttachItems({
         })();
       }
     },
-    [handleFileChange, documentSuite],
+    [handleFileChange, documentSuite, routeSuiteFiles],
   );
 
   const onUploadAndSaveChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -503,7 +560,7 @@ export default function useAttachItems({
 
   const onSuiteFilesSelected = useCallback(
     async (selectedFiles: File[]) => {
-      await routeSuiteFiles(selectedFiles);
+      await routeSuiteFiles(selectedFiles, undefined, { skipLatestSync: true });
     },
     [routeSuiteFiles],
   );

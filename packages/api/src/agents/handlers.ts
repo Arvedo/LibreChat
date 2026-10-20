@@ -7261,7 +7261,7 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
                   let sandboxReadSucceeded = false;
                   if (
                     tc.name === Constants.SKILL_TOOL ||
-                    tc.name === Constants.READ_FILE ||
+                    (tc.name === Constants.READ_FILE && !toolMap.has(Constants.READ_FILE)) ||
                     tc.name === SEARCH_WORKSPACE_TOOL_NAME ||
                     tc.name === LIST_WORKSPACE_FILES_TOOL_NAME ||
                     isFileAuthoringCall
