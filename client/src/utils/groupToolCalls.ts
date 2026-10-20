@@ -2,6 +2,7 @@ import { Constants, ContentTypes, ToolCallTypes } from 'librechat-data-provider'
 import type { TMessageContentParts, Agents } from 'librechat-data-provider';
 import type { PartWithIndex } from '~/components/Chat/Messages/Content/ParallelContent';
 import { getBatchActivityLabelPart, getActivityLabelText } from '~/utils/activityLabels';
+import { isInteractiveUserTool } from '~/components/Chat/Messages/Content/AskUserCard';
 
 export type GroupedPart =
   | { type: 'single'; part: PartWithIndex }
@@ -67,6 +68,12 @@ function isGroupableToolCall(part: TMessageContentParts): boolean {
   const isStandardToolCall =
     'args' in toolCall && (!toolCall.type || toolCall.type === ToolCallTypes.TOOL_CALL);
   if (isStandardToolCall && toolCall.name?.startsWith(Constants.LC_TRANSFER_TO_)) {
+    return false;
+  }
+  const toolName =
+    toolCall.name ||
+    ((toolCall as unknown as { function?: { name?: string } })?.function?.name ?? '');
+  if (isInteractiveUserTool(toolName)) {
     return false;
   }
   return true;

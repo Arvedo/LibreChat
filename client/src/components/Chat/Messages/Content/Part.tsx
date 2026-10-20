@@ -58,6 +58,7 @@ import Container from './Container';
 import WebSearch from './WebSearch';
 import ToolCall from './ToolCall';
 import Image from './Image';
+import AskUserCard, { isInteractiveUserTool } from './AskUserCard';
 
 const isFailedImageCall = (
   output: string | null | undefined,
@@ -407,8 +408,29 @@ const renderDefaultTool: ToolRenderer = ({
   />
 );
 
+const renderInteractiveUserTool: ToolRenderer = ({
+  toolCall,
+  toolCallId,
+  attachments,
+  isSubmitting,
+  hideAttachments,
+}) => (
+  <AskUserCard
+    toolCallId={toolCallId || toolCall.id || ''}
+    name={toolCall.name || ''}
+    args={toolCall.args ?? ''}
+    output={toolCall.output ?? ''}
+    isSubmitting={isSubmitting}
+    attachments={attachments}
+    hideAttachments={hideAttachments}
+  />
+);
+
 /** Calls a name alone cannot route: programmatic bash by its arguments, handoffs by prefix. */
 const matchTool = ({ name, args }: AgentToolCall): ToolRenderer | undefined => {
+  if (isInteractiveUserTool(name)) {
+    return renderInteractiveUserTool;
+  }
   if (isBashProgrammaticToolCall(name, args)) {
     return renderBashProgrammatic;
   }
@@ -425,6 +447,9 @@ const matchTool = ({ name, args }: AgentToolCall): ToolRenderer | undefined => {
  * (no output yet).
  */
 const wrapTool = (card: ReactNode, { toolCall, isSubmitting }: ToolRenderProps) => {
+  if (isInteractiveUserTool(toolCall.name)) {
+    return card;
+  }
   const preparedCard = (
     <ToolPreparation call={toolCall} isSubmitting={isSubmitting}>
       {card}
@@ -527,6 +552,19 @@ const renderAssistantsToolCall: PartRenderers['parts'][ContentTypes.TOOL_CALL] =
       </ToolPreparation>
     );
   } else if (toolCall.type === ToolCallTypes.FUNCTION && ToolCallTypes.FUNCTION in toolCall) {
+    if (isInteractiveUserTool(toolCall.function.name)) {
+      return (
+        <AskUserCard
+          toolCallId={(toolCall as { id?: string }).id ?? ''}
+          name={toolCall.function.name}
+          args={toolCall.function.arguments as string}
+          output={toolCall.function.output}
+          isSubmitting={isSubmitting}
+          attachments={attachments}
+          hideAttachments={hideAttachments}
+        />
+      );
+    }
     if (isImageVisionTool(toolCall)) {
       if (isSubmitting && showCursor) {
         return (
