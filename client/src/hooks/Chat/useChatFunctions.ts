@@ -9,6 +9,8 @@ import {
   QueryKeys,
   EModelEndpoint,
   isAssistantsEndpoint,
+  isAgentsEndpoint,
+  ReasoningEffort,
 } from 'librechat-data-provider';
 import {
   isSubmittingFamily,
@@ -362,6 +364,26 @@ export default function useChatFunctions({
       }
     }
 
+    const isAgent = isAgentsEndpoint(endpoint);
+    const agentId = isAgent ? conversation?.agent_id : undefined;
+    const savedAgent =
+      agentId != null
+        ? (queryClient.getQueryData<Agent>([QueryKeys.agent, agentId]) ?? agentsMap?.[agentId])
+        : undefined;
+    const agentEffort = (savedAgent?.model_parameters as Record<string, unknown> | undefined)
+      ?.reasoning_effort;
+    const isReasoning = Boolean(
+      (reasoningOverride?.value &&
+        reasoningOverride.value !== ReasoningEffort.none &&
+        reasoningOverride.value !== ReasoningEffort.unset) ||
+      (conversation?.reasoning_effort &&
+        conversation.reasoning_effort !== ReasoningEffort.none &&
+        conversation.reasoning_effort !== ReasoningEffort.unset) ||
+      (agentEffort &&
+        agentEffort !== ReasoningEffort.none &&
+        agentEffort !== ReasoningEffort.unset),
+    );
+
     const turn = buildTurn({
       text,
       params: { text, overrideConvoId, overrideUserMessageId, parentMessageId, messageId },
@@ -398,6 +420,7 @@ export default function useChatFunctions({
       manualSkills,
       quotes,
       reasoningOverride,
+      isReasoning,
       code: {
         approvalMode: codeApprovalMode,
         latestApprovalMode: latestCodeApprovalMode,

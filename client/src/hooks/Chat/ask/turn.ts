@@ -57,6 +57,7 @@ export type BuildTurnInput = {
   manualSkills: string[];
   quotes: string[];
   reasoningOverride: TMessage['reasoningOverride'];
+  isReasoning?: boolean;
   code: {
     approvalMode: TSubmission['codeApprovalMode'];
     latestApprovalMode?: TConversation['codeApprovalMode'];
@@ -126,6 +127,7 @@ export function buildTurn({
   manualSkills,
   quotes,
   reasoningOverride,
+  isReasoning,
   code,
   conversationId: resolvedConversationId,
 }: BuildTurnInput): BuiltTurn {
@@ -422,6 +424,13 @@ export function buildTurn({
         endpointsConfig,
         modelSpecs,
       );
+    } else if (isReasoning && !isContinued && !editedContent) {
+      initialResponse.content = [
+        {
+          type: ContentTypes.THINK,
+          [ContentTypes.THINK]: '',
+        },
+      ];
     } else {
       initialResponse.content = [];
     }
