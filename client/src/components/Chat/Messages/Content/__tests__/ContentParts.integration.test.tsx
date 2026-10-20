@@ -2139,6 +2139,30 @@ describe('ContentParts — live activity fold', () => {
     );
   });
 
+  it('keeps the initial Reasoning node mounted when transitioning from an empty seeded thought to streamed text with showThinking enabled', () => {
+    const frame = (think: string, extra: TMessageContentParts[] = []) => (
+      <RecoilRoot>
+        <ContentParts
+          {...liveProps}
+          showThinking={true}
+          content={[
+            { type: ContentTypes.THINK, think } as unknown as TMessageContentParts,
+            ...extra,
+          ]}
+        />
+      </RecoilRoot>
+    );
+    const { rerender } = render(frame(''));
+    const initialReasoning = screen.getByTestId('reasoning');
+
+    rerender(frame('First streamed thought token.'));
+    expect(screen.queryByTestId('activity-phase-card')).toBeNull();
+    expect(screen.getByTestId('reasoning')).toBe(initialReasoning);
+
+    rerender(frame('First streamed thought token.', [makeTextPart('Final answer.')]));
+    expect(screen.getByTestId('reasoning')).toBe(initialReasoning);
+  });
+
   it('keeps a thought on its own open row for a reader who opens thinking by default', () => {
     renderContentParts({
       ...liveProps,

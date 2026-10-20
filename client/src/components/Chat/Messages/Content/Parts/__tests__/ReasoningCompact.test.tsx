@@ -152,4 +152,28 @@ describe('ReasoningCompact', () => {
     expect(body).toHaveTextContent('Checking the manifest.');
     expect(body.textContent).not.toContain(prefix.slice(0, 32));
   });
+
+  it('keeps the body unmounted while streaming an initial empty thought even when showThinking is true', () => {
+    const { rerender } = render(
+      <ReasoningCompact reasoning="" label="Thinking..." showThinking={true} isStreaming={true} />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Thinking...' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    const body = screen.getByRole('group', { hidden: true });
+    expect(body).toHaveAttribute('aria-hidden', 'true');
+    expect(body.querySelector('p')).toBeNull();
+
+    rerender(
+      <ReasoningCompact
+        reasoning="First reasoning token"
+        label="Thinking..."
+        showThinking={true}
+        isStreaming={true}
+      />,
+    );
+
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('First reasoning token')).toBeInTheDocument();
+  });
 });
