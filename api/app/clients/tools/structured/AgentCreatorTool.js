@@ -45,7 +45,7 @@ class AgentCreatorTool extends Tool {
       .array(z.string())
       .optional()
       .describe(
-        'Liste der Tools, die der Agent nutzen darf. Verfügbare Werte: "searxng_search", "web_scraper", "file_creator", "execute_code", "read_file", "condense_context", "tool_catalog", "cron_scheduler", "doc_search_mcp_document_search", "doc_sql_mcp_document_search", "agent_creator".',
+        'Liste der Tools, die der Agent nutzen darf. Verfügbare Werte: "searxng_search", "web_scraper", "file_creator", "execute_code", "read_file", "condense_context", "tool_catalog", "doc_search_mcp_document_search", "doc_sql_mcp_document_search", "agent_creator".',
       ),
     conversation_starters: z
       .array(z.string())
@@ -75,12 +75,40 @@ class AgentCreatorTool extends Tool {
     this.userId = fields.userId || null;
   }
 
-  async _call(input) {
+  async _call(input, arg2, arg3) {
     try {
+      const writeActions = new Set(['test_and_create', 'create', 'update', 'delete']);
+      let stateMarkerPrefix = '';
+      if (writeActions.has(input?.action)) {
+        const config = arg3 ?? arg2;
+        const toolCallId = String(config?.toolCall?.id || '');
+        const approveRes = await axios.post(
+          `${this.baseUrl}/api/user-input/wait`,
+          {
+            tool_call_id: toolCallId,
+            tool_name: this.name || 'agent_creator',
+            is_gate: true,
+            question: `KI-Agent Aktion "${input.action}"${input.name ? ` für "${input.name}"` : ''} ausführen?`,
+            args: input || {},
+            user_id: String(this.userId || 'default'),
+            timeout: 600,
+          },
+          { timeout: 615000 },
+        );
+        const gateData = approveRes.data || {};
+        if (gateData.approved !== true) {
+          return (
+            gateData.formatted_output ||
+            `[FREIGABE ABGELEHNT]: Die Agent-Aktion "${input.action}" wurde vom Nutzer abgelehnt.`
+          );
+        }
+        stateMarkerPrefix = gateData.state_marker ? `${gateData.state_marker}\n` : '';
+      }
+
       const response = await axios.post(
         `${this.baseUrl}/api/agent-creator/action`,
         {
-          action: input.action,
+          action: input.action === 'create' ? 'test_and_create' : input.action,
           agent_id: input.agent_id || null,
           name: input.name || null,
           description: input.description || null,
@@ -111,8 +139,8 @@ class AgentCreatorTool extends Tool {
         return out;
       }
 
-      if (input.action === 'test_and_create') {
-        let out = `### ✅ Agent **${d.agent?.name}** erfolgreich getestet & erstellt!\n\n`;
+      if (input.action === 'test_and_create' || input.action === 'create') {
+        let out = `${stateMarkerPrefix}### ✅ Agent **${d.agent?.name}** erfolgreich getestet & erstellt!\n\n`;
         out += `- **Agenten-ID:** \`${d.agent?.id}\`\n`;
         out += `- **Tools:** ${(d.agent?.tools || []).map((t) => `\`${t}\``).join(', ') || 'Keine'}\n`;
         if (d.test_result) {

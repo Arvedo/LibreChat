@@ -1404,47 +1404,67 @@ function createToolInstance({
       const customUserVars =
         config?.configurable?.userMCPAuthMap?.[`${Constants.mcp_prefix}${serverName}`];
 
-      const GATED_MCP_TOOLS = new Set([
-        'youtrack_create_issue',
-        'youtrack_update_issue',
-        'coding_task',
-        'code_change',
-      ]);
-      if (GATED_MCP_TOOLS.has(serverToolName)) {
+      const WRITE_MCP_TOOL_PATTERN =
+        /^(youtrack_create_issue|youtrack_update_issue|coding_task|code_change)$|(?:^|_)(create|update|delete|remove|write|modify|edit|patch|send|close|assign|comment)(?:_|$)/i;
+      let gateStateMarker = '';
+      if (WRITE_MCP_TOOL_PATTERN.test(serverToolName)) {
+        if (toolArguments && typeof toolArguments === 'object') {
+          delete toolArguments.gate_token;
+          delete toolArguments._gate_token;
+        }
         try {
           const axios = require('axios');
           const pluginsApiUrl = process.env.PLUGINS_API_URL || 'http://plugins_api:8000';
-          const details = {};
+          const cleanArgs = {};
           if (toolArguments && typeof toolArguments === 'object') {
             for (const [k, v] of Object.entries(toolArguments)) {
               if (k !== 'user_email' && v !== undefined && v !== null && String(v).trim() !== '') {
-                details[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+                cleanArgs[k] = v;
               }
             }
           }
           const approveRes = await axios.post(
             `${pluginsApiUrl}/api/user-input/wait`,
             {
+              tool_call_id: String(toolCall?.id || ''),
+              tool_name: serverToolName,
+              is_gate: true,
+              question: String(
+                toolArguments?.reason ||
+                  toolArguments?.question ||
+                  `Soll die Schreib-Aktion "${serverToolName}" ausgeführt werden?`,
+              ),
+              args: cleanArgs,
               user_id: String(userId || 'default'),
-              title: `Freigabe erforderlich: ${serverToolName}`,
-              question: `Soll die Aktion "${serverToolName}" mit den folgenden Parametern ausgeführt werden?`,
-              options: ['Ja, jetzt ausführen', 'Nein, abbrechen'],
-              allow_custom: true,
-              details,
-              timeout: 240,
+              timeout: 600,
             },
-            { timeout: 250000 },
+            { timeout: 615000 },
           );
-          const answer = String(approveRes.data?.answer || '').trim();
+          const gateData = approveRes.data || {};
+          if (gateData.approved !== true) {
+            return [
+              gateData.formatted_output ||
+                `[FREIGABE ABGELEHNT VOM NUTZER]: Die Schreib-Aktion "${serverToolName}" wurde nicht freigegeben und daher NICHT ausgeführt.`,
+              undefined,
+            ];
+          }
+          gateStateMarker = gateData.state_marker ? `${gateData.state_marker}\n` : '';
           if (
-            approveRes.data?.status !== 'answered' ||
-            answer.toLowerCase().startsWith('nein') ||
-            answer.toLowerCase().includes('abbrechen')
+            gateData.gate_token &&
+            toolArguments &&
+            typeof toolArguments === 'object' &&
+            (schema?.properties?.gate_token || serverToolName.startsWith('youtrack_'))
           ) {
-            return `Aktion "${serverToolName}" wurde vom Nutzer abgelehnt oder abgebrochen (${answer || 'Timeout'}).`;
+            toolArguments = { ...toolArguments, gate_token: gateData.gate_token };
           }
         } catch (gateErr) {
-          logger.warn(`[MCP] Approval gate skipped or failed for ${serverToolName}: ${gateErr?.message}`);
+          logger.error(
+            `[MCP] Mandatory user approval gate failed for write tool ${serverToolName}; blocking execution: ${gateErr?.message}`,
+          );
+          return [
+            `[SICHERHEITS-SPERRE]: Die erforderliche Nutzer-Freigabe für "${serverToolName}" konnte nicht eingeholt werden (${gateErr?.message || 'Gate-Fehler'}). Die Schreib-Aktion wurde NICHT ausgeführt.`,
+            undefined,
+          ];
         }
       }
 
@@ -1504,6 +1524,14 @@ function createToolInstance({
         oboIdentityContext: capturedOboIdentityContext,
         mcpApps: capturedMCPApps,
       });
+      if (gateStateMarker) {
+        if (Array.isArray(result) && typeof result[0] === 'string' && !result[0].includes('ASK_USER_STATE:')) {
+          return [`${gateStateMarker}${result[0]}`, result[1]];
+        }
+        if (typeof result === 'string' && !result.includes('ASK_USER_STATE:')) {
+          return `${gateStateMarker}${result}`;
+        }
+      }
       return result;
     } catch (error) {
       /** A user Stop aborts every in-flight call at once, and that rejection is

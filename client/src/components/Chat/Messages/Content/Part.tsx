@@ -428,7 +428,7 @@ const renderInteractiveUserTool: ToolRenderer = ({
 
 /** Calls a name alone cannot route: programmatic bash by its arguments, handoffs by prefix. */
 const matchTool = ({ name, args }: AgentToolCall): ToolRenderer | undefined => {
-  if (isInteractiveUserTool(name)) {
+  if (isInteractiveUserTool(name, args)) {
     return renderInteractiveUserTool;
   }
   if (isBashProgrammaticToolCall(name, args)) {
@@ -447,7 +447,7 @@ const matchTool = ({ name, args }: AgentToolCall): ToolRenderer | undefined => {
  * (no output yet).
  */
 const wrapTool = (card: ReactNode, { toolCall, isSubmitting }: ToolRenderProps) => {
-  if (isInteractiveUserTool(toolCall.name)) {
+  if (isInteractiveUserTool(toolCall.name, toolCall.args)) {
     return card;
   }
   const preparedCard = (
@@ -552,7 +552,7 @@ const renderAssistantsToolCall: PartRenderers['parts'][ContentTypes.TOOL_CALL] =
       </ToolPreparation>
     );
   } else if (toolCall.type === ToolCallTypes.FUNCTION && ToolCallTypes.FUNCTION in toolCall) {
-    if (isInteractiveUserTool(toolCall.function.name)) {
+    if (isInteractiveUserTool(toolCall.function.name, toolCall.function.arguments)) {
       return (
         <AskUserCard
           toolCallId={(toolCall as { id?: string }).id ?? ''}

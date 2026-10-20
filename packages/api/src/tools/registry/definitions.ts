@@ -433,42 +433,6 @@ export const askUserSchema: ExtendedJsonSchema = {
   required: ['question'],
 };
 
-export const cronSchedulerSchema: ExtendedJsonSchema = {
-  type: 'object',
-  properties: {
-    action: {
-      type: 'string',
-      enum: ['list', 'create', 'update', 'delete', 'toggle', 'run'],
-      description: 'Aktion: list, create, update, delete, toggle oder run.',
-    },
-    job_id: {
-      type: 'string',
-      description: 'ID des Cron-Jobs (für update, delete, toggle, run).',
-    },
-    name: {
-      type: 'string',
-      description: 'Name des Cron-Jobs.',
-    },
-    cron_expression: {
-      type: 'string',
-      description: '5-teiliger Cron-Ausdruck (z.B. "0 8 * * 1-5").',
-    },
-    prompt: {
-      type: 'string',
-      description: 'Die Aufgabe/Anweisung, die bei Ausführung abgearbeitet werden soll.',
-    },
-    agent_id: {
-      type: 'string',
-      description: 'Optionale Agent-ID für die Ausführung.',
-    },
-    enabled: {
-      type: 'boolean',
-      description: 'Ob der Job aktiv ist (Standard: true).',
-    },
-  },
-  required: ['action'],
-};
-
 /** Tavily Search Results tool JSON schema */
 export const tavilySearchSchema: ExtendedJsonSchema = {
   type: 'object',
@@ -714,20 +678,6 @@ export const toolDefinitions: Record<string, ToolRegistryDefinition> = {
     description:
       'Stellt dem Nutzer eine interaktive Rückfrage mit klickbaren Antwortoptionen im Chat und wartet auf die Auswahl.',
     schema: askUserSchema,
-    toolType: 'builtin',
-  },
-  cron_scheduler: {
-    name: 'cron_scheduler',
-    description:
-      'Verwaltet zeitgesteuerte Hintergrund-Aufgaben (Cron-Jobs): Auflisten, Erstellen, Aktualisieren, Aktivieren/Deaktivieren und Löschen.',
-    schema: cronSchedulerSchema,
-    toolType: 'builtin',
-  },
-  cron_job: {
-    name: 'cron_job',
-    description:
-      'Verwaltet zeitgesteuerte Hintergrund-Aufgaben (Cron-Jobs): Auflisten, Erstellen, Aktualisieren, Aktivieren/Deaktivieren und Löschen.',
-    schema: cronSchedulerSchema,
     toolType: 'builtin',
   },
 };

@@ -73,7 +73,10 @@ function isGroupableToolCall(part: TMessageContentParts): boolean {
   const toolName =
     toolCall.name ||
     ((toolCall as unknown as { function?: { name?: string } })?.function?.name ?? '');
-  if (isInteractiveUserTool(toolName)) {
+  const toolArgs =
+    (toolCall as { args?: unknown }).args ??
+    ((toolCall as unknown as { function?: { arguments?: unknown } })?.function?.arguments ?? '');
+  if (isInteractiveUserTool(toolName, toolArgs)) {
     return false;
   }
   return true;

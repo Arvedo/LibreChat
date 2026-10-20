@@ -21,6 +21,16 @@ export const GATED_TOOL_BASE_NAMES = new Set([
   'code_change',
 ]);
 
+export const WRITE_TOOL_NAME_PATTERN =
+  /^(youtrack_create_issue|youtrack_update_issue|coding_task|code_change)$|(?:^|_)(create|update|delete|remove|write|modify|edit|patch|send|close|assign|comment)(?:_|$)/i;
+
+export const ACTION_GATED_TOOLS = new Set([
+  'agent_creator',
+  'create_agent',
+]);
+
+const READ_ONLY_ACTIONS = new Set(['list', 'get', 'search', 'read', 'propose', 'recommend']);
+
 export function getBaseToolName(rawName?: string): string {
   if (!rawName) return '';
   const idx = rawName.indexOf(Constants.mcp_delimiter);
@@ -30,9 +40,41 @@ export function getBaseToolName(rawName?: string): string {
   return rawName;
 }
 
-export function isInteractiveUserTool(rawName?: string): boolean {
+export function isGateToolCall(rawName?: string, rawArgs?: unknown): boolean {
   const base = getBaseToolName(rawName);
-  return base === 'ask_user' || base === 'rueckfrage' || GATED_TOOL_BASE_NAMES.has(base);
+  if (
+    !base ||
+    base === 'ask_user' ||
+    base === 'rueckfrage' ||
+    base === 'file_creator' ||
+    base === 'execute_code' ||
+    base === 'read_file'
+  ) {
+    return false;
+  }
+  if (GATED_TOOL_BASE_NAMES.has(base)) {
+    return true;
+  }
+  if (ACTION_GATED_TOOLS.has(base)) {
+    const parsed = parseArgsObject(rawArgs as string | Record<string, unknown> | undefined);
+    const action = typeof parsed.action === 'string' ? parsed.action.trim().toLowerCase() : '';
+    if (!action) {
+      if (typeof rawArgs === 'string') {
+        const m = rawArgs.match(/"action"\s*:\s*"([^"]+)"/);
+        if (m) {
+          return !READ_ONLY_ACTIONS.has(m[1].toLowerCase());
+        }
+      }
+      return false;
+    }
+    return !READ_ONLY_ACTIONS.has(action);
+  }
+  return WRITE_TOOL_NAME_PATTERN.test(base);
+}
+
+export function isInteractiveUserTool(rawName?: string, rawArgs?: unknown): boolean {
+  const base = getBaseToolName(rawName);
+  return base === 'ask_user' || base === 'rueckfrage' || isGateToolCall(rawName, rawArgs);
 }
 
 interface PersistedUserState {
@@ -132,6 +174,18 @@ const GATE_LABELS: Record<
     approveOption: 'Ja, Code-Änderung jetzt umsetzen',
     declineOption: 'Nein, abbrechen',
   },
+  agent_creator: {
+    badge: 'Freigabe erforderlich',
+    title: 'KI-Agent erstellen / ändern',
+    approveOption: 'Ja, Agent-Aktion jetzt ausführen',
+    declineOption: 'Nein, abbrechen',
+  },
+  create_agent: {
+    badge: 'Freigabe erforderlich',
+    title: 'KI-Agent erstellen / ändern',
+    approveOption: 'Ja, Agent-Aktion jetzt ausführen',
+    declineOption: 'Nein, abbrechen',
+  },
 };
 
 const PARAM_LABELS: Record<string, string> = {
@@ -183,7 +237,7 @@ export default function AskUserCard({
   hideAttachments = false,
 }: AskUserCardProps) {
   const baseName = useMemo(() => getBaseToolName(name), [name]);
-  const isGate = useMemo(() => GATED_TOOL_BASE_NAMES.has(baseName), [baseName]);
+  const isGate = useMemo(() => isGateToolCall(name, rawArgs), [name, rawArgs]);
   const parsedArgs = useMemo(() => parseArgsObject(rawArgs), [rawArgs]);
   const { state: persistedState, cleanOutput } = useMemo(() => parseOutputState(output), [output]);
   const hasOutput = Boolean(output && output.length > 0);

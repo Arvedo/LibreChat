@@ -36,48 +36,48 @@ class AskUserTool extends Tool {
     this.userId = fields.userId || 'system';
   }
 
-  async _call(input) {
+  async _call(input, arg2, arg3) {
     try {
       const { question, options = [], multi_select = false, context = '' } = input || {};
       if (!question || !String(question).trim()) {
         return 'Fehler: Parameter "question" darf nicht leer sein.';
       }
+      const config = arg3 ?? arg2;
+      const toolCallId = String(config?.toolCall?.id || '');
+      const cleanOptions = Array.isArray(options) ? options.map((o) => String(o)) : [];
 
       const response = await axios.post(
         `${this.baseUrl}/api/user-input/wait`,
         {
-          kind: 'ask_user',
-          title: 'Rückfrage',
+          tool_call_id: toolCallId,
+          tool_name: this.name || 'ask_user',
+          is_gate: false,
           question: String(question).trim(),
-          options: Array.isArray(options) ? options.map((o) => String(o)) : [],
-          multi_select: Boolean(multi_select),
+          options: cleanOptions,
           context: context ? String(context).trim() : '',
-          user_id: this.userId,
-          timeout_seconds: 600,
+          args: {
+            question: String(question).trim(),
+            options: cleanOptions,
+            multi_select: Boolean(multi_select),
+            context: context ? String(context).trim() : '',
+          },
+          user_id: String(this.userId || 'system'),
+          timeout: 600,
         },
         { timeout: 615000 },
       );
 
       const data = response.data || {};
+      if (data.formatted_output) {
+        return data.formatted_output;
+      }
       if (data.status === 'timeout') {
         return 'Der Benutzer hat innerhalb des Zeitlimits nicht auf die Rückfrage geantwortet. Bitte fahre mit einer sinnvollen Standardannahme fort oder weise kurz darauf hin.';
       }
-      if (data.status === 'cancelled') {
-        return `Der Benutzer hat die Rückfrage übersprungen/abgebrochen${data.custom_text ? ` (Anmerkung: ${data.custom_text})` : ''}.`;
+      if (data.final_answer) {
+        return `${data.state_marker ? `${data.state_marker}\n` : ''}Antwort des Nutzers: "${data.final_answer}"`;
       }
-
-      const parts = [];
-      if (Array.isArray(data.selected_options) && data.selected_options.length > 0) {
-        parts.push(`Gewählte Antwort(en): ${data.selected_options.join(', ')}`);
-      }
-      if (data.custom_text && String(data.custom_text).trim()) {
-        parts.push(`Freitext-Antwort des Benutzers: ${String(data.custom_text).trim()}`);
-      }
-      if (parts.length === 0 && data.answer) {
-        parts.push(`Antwort des Benutzers: ${data.answer}`);
-      }
-
-      return parts.join('\n') || 'Der Benutzer hat ohne spezifische Auswahl bestätigt.';
+      return 'Der Benutzer hat ohne spezifische Auswahl bestätigt.';
     } catch (error) {
       const errMsg = error.response?.data?.detail || error.message;
       logger.error('[AskUserTool] Error waiting for user response:', errMsg);

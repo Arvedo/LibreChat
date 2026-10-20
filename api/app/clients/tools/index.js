@@ -12,7 +12,6 @@ const TraversaalSearch = require('./structured/TraversaalSearch');
 const createOpenAIImageTools = require('./structured/OpenAIImageTools');
 const TavilySearchResults = require('./structured/TavilySearchResults');
 const createGeminiImageTool = require('./structured/GeminiImageGen');
-const CronJobTool = require('./structured/CronJobTool');
 const ToolCatalogTool = require('./structured/ToolCatalogTool');
 const FileCreatorTool = require('./structured/FileCreatorTool');
 const WebScraperTool = require('./structured/WebScraperTool');
@@ -36,7 +35,6 @@ module.exports = {
   TavilySearchResults,
   createOpenAIImageTools,
   createGeminiImageTool,
-  CronJobTool,
   ToolCatalogTool,
   FileCreatorTool,
   WebScraperTool,

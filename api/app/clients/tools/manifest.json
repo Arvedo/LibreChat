@@ -182,20 +182,6 @@
     ]
   },
   {
-    "name": "Cron Scheduler",
-    "pluginKey": "cron_scheduler",
-    "description": "Erstellt, listet, aktualisiert und löscht wiederkehrende Hintergrund-Automatisierungen (Cron-Jobs).",
-    "icon": "assets/calculator.svg",
-    "authConfig": []
-  },
-  {
-    "name": "Cron Job",
-    "pluginKey": "cron_job",
-    "description": "Erstellt, listet, aktualisiert und löscht wiederkehrende Hintergrund-Automatisierungen (Cron-Jobs).",
-    "icon": "assets/calculator.svg",
-    "authConfig": []
-  },
-  {
     "name": "Tool Catalog",
     "pluginKey": "tool_catalog",
     "description": "Durchsucht verfügbare Werkzeuge und gibt passende Tool-Empfehlungen zurück.",
