@@ -223,13 +223,16 @@ export function updateContent(
     );
   }
 
-  if (!updatedContent[index] && contentType !== ContentTypes.TOOL_CALL) {
-    updatedContent[index] = { type: contentPart.type as AllContentTypes };
-  }
-
   /** Prevent overwriting an existing content part with a different type */
-  const existingType = (updatedContent[index]?.type as string | undefined) ?? '';
-  if (
+  const existingPart = updatedContent[index];
+  const existingType = (existingPart?.type as string | undefined) ?? '';
+  const isUnusedThinkPlaceholder =
+    existingType === ContentTypes.THINK &&
+    !(existingPart as { think?: string } | undefined)?.think;
+
+  if (isUnusedThinkPlaceholder && existingType !== contentType) {
+    updatedContent[index] = undefined;
+  } else if (
     existingType &&
     existingType !== contentType &&
     !contentType.startsWith(existingType) &&
@@ -237,6 +240,10 @@ export function updateContent(
   ) {
     console.warn('Content type mismatch', { existingType, contentType, index });
     return message;
+  }
+
+  if (!updatedContent[index] && contentType !== ContentTypes.TOOL_CALL) {
+    updatedContent[index] = { type: contentPart.type as AllContentTypes };
   }
 
   if (

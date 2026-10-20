@@ -231,7 +231,7 @@ const Reasoning = memo((props: ReasoningProps) => {
       : localize('com_ui_thoughts');
   }, [effectiveIsSubmitting, isLast, localize, reasoningLabel]);
 
-  if (!reasoningText) {
+  if (!reasoningText && !streaming) {
     return null;
   }
 
@@ -387,7 +387,7 @@ export const ReasoningCompact = memo(
       }
     }, []);
 
-    if (!reasoningText) {
+    if (!reasoningText && !isStreaming) {
       return null;
     }
 

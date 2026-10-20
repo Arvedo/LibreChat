@@ -1,10 +1,12 @@
-import { Constants, StepTypes, StepEvents } from 'librechat-data-provider';
+import { Constants, StepTypes, StepEvents, ContentTypes } from 'librechat-data-provider';
 import type { TMessage, TMessageContentParts } from 'librechat-data-provider';
 import type { StepEvent, StepEffect, StepContext, StreamState } from './stream/state';
 import {
   getEditPrefix,
   applyAgentUpdate,
   applySummaryStep,
+  updateContent,
+  getStepMetadata,
   applyMessageDelta,
   finalizeSummaries,
   applyToolCallsStep,
@@ -152,6 +154,27 @@ export function reduceStep(state: StreamState, event: StepEvent, ctx: StepContex
       );
       state.messages.set(responseMessageId, updatedResponse);
       merge(updatedResponse, responseMessageId);
+    }
+
+    if (
+      runStep.stepDetails.type === StepTypes.MESSAGE_CREATION &&
+      (runStep.stepDetails.message_creation as { content_type?: string } | undefined)?.content_type === ContentTypes.THINK
+    ) {
+      const index = runStep.index + editPrefixOffset;
+      const currentMessage = state.messages.get(responseMessageId) ?? response;
+      const currentPart = currentMessage.content?.[index];
+      if (currentPart?.type !== ContentTypes.THINK) {
+        const metadata = getStepMetadata(runStep);
+        const updatedResponse = updateContent(
+          currentMessage,
+          index,
+          { type: ContentTypes.THINK, think: '' },
+          false,
+          metadata,
+        );
+        state.messages.set(responseMessageId, updatedResponse);
+        merge(updatedResponse, responseMessageId);
+      }
     }
 
     const bufferedDeltas = state.pendingDeltas.get(runStep.id);
