@@ -99,48 +99,40 @@ async function buildEndpointOption(req, res, next) {
         ? { ...parsedBody, chatProjectId: rawChatProjectId }
         : parsedBody;
 
-    const addedEndpoints = appConfig.modelSpecs?.addedEndpoints;
-    const isAddedEndpoint =
-      Array.isArray(addedEndpoints) &&
-      (addedEndpoints.includes(endpoint) ||
-        (endpointType != null && addedEndpoints.includes(endpointType)));
-
-    if (!spec && !isAddedEndpoint) {
+    if (!spec) {
       return handleError(res, { text: 'No model spec selected' });
     }
 
-    if (spec) {
-      const modelSpecResolution = resolveModelSpecForEndpoint({
-        modelSpecs: { list },
-        spec,
-        endpoint,
+    const modelSpecResolution = resolveModelSpecForEndpoint({
+      modelSpecs: { list },
+      spec,
+      endpoint,
+    });
+    if ('error' in modelSpecResolution) {
+      return handleError(res, {
+        text:
+          modelSpecResolution.error === 'invalid-model-spec'
+            ? 'Invalid model spec'
+            : 'Model spec mismatch',
       });
-      if ('error' in modelSpecResolution) {
-        return handleError(res, {
-          text:
-            modelSpecResolution.error === 'invalid-model-spec'
-              ? 'Invalid model spec'
-              : 'Model spec mismatch',
-        });
-      }
-      const { modelSpec: currentModelSpec } = modelSpecResolution;
+    }
+    const { modelSpec: currentModelSpec } = modelSpecResolution;
 
-      try {
-        const result = applyModelSpecPreset({
-          modelSpec: currentModelSpec,
-          parsedBody: parsedBodyForModelSpec,
-          endpoint,
-          endpointType,
-          defaultParamsEndpoint,
-          includePresetDefaults: true,
-        });
-        parsedBody = result.parsedBody;
-        appliedModelSpecPrivateFields = result.appliedPrivateFields;
-        enforcedModelSpecFields = result.enforcedFields;
-      } catch (error) {
-        logger.error('Error parsing model spec', error);
-        return handleError(res, { text: 'Error parsing model spec' });
-      }
+    try {
+      const result = applyModelSpecPreset({
+        modelSpec: currentModelSpec,
+        parsedBody: parsedBodyForModelSpec,
+        endpoint,
+        endpointType,
+        defaultParamsEndpoint,
+        includePresetDefaults: true,
+      });
+      parsedBody = result.parsedBody;
+      appliedModelSpecPrivateFields = result.appliedPrivateFields;
+      enforcedModelSpecFields = result.enforcedFields;
+    } catch (error) {
+      logger.error('Error parsing model spec', error);
+      return handleError(res, { text: 'Error parsing model spec' });
     }
   } else if (parsedBody.spec && appConfig.modelSpecs?.list) {
     const modelSpecResolution = resolveModelSpecForEndpoint({
