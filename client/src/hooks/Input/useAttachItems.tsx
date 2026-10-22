@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import {
   Providers,
+  Permissions,
+  PermissionTypes,
   EToolResources,
   EModelEndpoint,
   getConfiguredMimeAccept,
@@ -37,8 +39,13 @@ import {
   setLastUsedDataset,
   uploadToLatestChatUploads,
 } from '~/data-provider/documentSuite';
+import {
+  useHasAccess,
+  useAgentToolPermissions,
+  useAgentCapabilities,
+  useGetAgentsConfig,
+} from '~/hooks';
 import { useSharePointFileHandlingNoChatContext } from '~/hooks/Files/useSharePointFileHandling';
-import { useAgentToolPermissions, useAgentCapabilities, useGetAgentsConfig } from '~/hooks';
 import useExtensionFeatures from '~/hooks/Nav/useExtensionFeatures';
 import { useFileHandlingNoChatContext } from '~/hooks/Files';
 import { useGetStartupConfig } from '~/data-provider';
@@ -102,10 +109,12 @@ export interface UseAttachItems {
 }
 
 interface UseAttachItemsParams {
+  index?: number;
   agentId?: string | null;
   endpoint?: string | null;
   endpointType?: EModelEndpoint | string;
   endpointFileConfig?: EndpointFileConfig;
+  /** Unified mode keeps implicit upload first, alongside explicit tool destinations. */
   isUnifiedMode?: boolean;
   useResponsesApi?: boolean;
   conversationId: string;
@@ -116,6 +125,7 @@ interface UseAttachItemsParams {
 }
 
 export default function useAttachItems({
+  index = 0,
   agentId,
   endpoint,
   endpointType,
@@ -142,6 +152,7 @@ export default function useAttachItems({
   const [, setEphemeralAgent] = useRecoilState(ephemeralAgentByConvoId(conversationId));
 
   const { handleFileChange, handleFiles } = useFileHandlingNoChatContext(undefined, {
+    index,
     files,
     setFiles,
     setFilesLoading,
@@ -150,7 +161,7 @@ export default function useAttachItems({
   const { handleSharePointFiles, isProcessing, downloadProgress } =
     useSharePointFileHandlingNoChatContext(
       { toolResource: sharePointResource },
-      { files, setFiles, setFilesLoading, conversation },
+      { index, files, setFiles, setFilesLoading, conversation },
     );
 
   const ephemeralAgent = useRecoilValue(ephemeralAgentByConvoId(conversationId));
@@ -161,6 +172,10 @@ export default function useAttachItems({
   const { contextEnabled, fileSearchEnabled, codeEnabled } = useAgentCapabilities(
     agentsConfig?.capabilities ?? defaultAgentCapabilities,
   );
+  const canUseFileSearch = useHasAccess({
+    permissionType: PermissionTypes.FILE_SEARCH,
+    permission: Permissions.USE,
+  });
   const { tools, provider } = useAgentToolPermissions(agentId, ephemeralAgent);
   const { fileSearchAllowedByAgent, codeAllowedByAgent } = getUploadToolAllowances(agentId, tools);
 
@@ -342,6 +357,8 @@ export default function useAttachItems({
 
     const build = (onAction: (fileType?: FileUploadType) => void, prefix: string) => {
       const items: AttachEntry[] = [];
+      /* Keep implicit attachment as the default; tool destinations below are
+         deliberate opt-ins, not a reason to embed every upload. */
       if (isUnifiedMode) {
         items.push({
           id: `${prefix}:unified`,
@@ -365,101 +382,112 @@ export default function useAttachItems({
             }
           },
         });
-        return items;
-      }
-      if (isAssistantsEndpoint(endpoint)) {
-        items.push({
-          id: `${prefix}:assistants`,
-          label: localize('com_sidepanel_attach_files'),
-          primary: true,
-          icon: <FileImageIcon className="icon-md" aria-hidden="true" />,
-          onSelect: () => {
-            setToolResource(undefined);
-            onAction();
-          },
-        });
-        return items;
-      }
-
-      let currentProvider = provider || endpoint;
-
-      if (currentProvider?.toLowerCase() === Providers.OPENROUTER) {
-        currentProvider = Providers.OPENROUTER;
-      }
-
-      const isAzureWithResponsesApi =
-        (currentProvider === EModelEndpoint.azureOpenAI ||
-          endpointType === EModelEndpoint.azureOpenAI) &&
-        useResponsesApi === true;
-
-      if (
-        isDocumentSupportedProvider(endpointType) ||
-        isDocumentSupportedProvider(currentProvider) ||
-        isAzureWithResponsesApi
-      ) {
-        items.push({
-          id: `${prefix}:provider`,
-          label: localize('com_ui_upload_provider'),
-          primary: true,
-          icon: <FileImageIcon className="icon-md" aria-hidden="true" />,
-          onSelect: () => {
-            setToolResource(undefined);
-            let fileType: Exclude<FileUploadType, 'image' | 'document'> = 'image_document';
-            if (currentProvider === Providers.GOOGLE || currentProvider === Providers.OPENROUTER) {
-              fileType = 'image_document_video_audio';
-            } else if (
-              currentProvider === Providers.BEDROCK ||
-              endpointType === EModelEndpoint.bedrock
-            ) {
-              fileType = 'image_document_extended';
-            } else if (
-              endpointType === EModelEndpoint.custom &&
-              isExplicitMimeConfig(endpointFileConfig?.supportedMimeTypes)
-            ) {
-              fileType = 'image_document_video_audio_configured';
-            }
-            onAction(fileType);
-          },
-        });
+        if (isAssistantsEndpoint(endpoint)) {
+          return items;
+        }
       } else {
-        items.push({
-          id: `${prefix}:image`,
-          label: localize('com_ui_upload_image_input'),
-          primary: true,
-          icon: <ImageUpIcon className="icon-md" aria-hidden="true" />,
-          onSelect: () => {
-            setToolResource(undefined);
-            onAction('image');
-          },
-        });
+        /* Assistants own their own file handling: whatever the assistant is
+           configured to accept goes up unfiltered, and none of the tool
+           destinations below apply. Scoping this to the image capability, as the
+           provider check would, silently dropped PDF support. */
+        if (isAssistantsEndpoint(endpoint)) {
+          items.push({
+            id: `${prefix}:assistants`,
+            label: localize('com_sidepanel_attach_files'),
+            primary: true,
+            icon: <FileImageIcon className="icon-md" aria-hidden="true" />,
+            onSelect: () => {
+              setToolResource(undefined);
+              onAction();
+            },
+          });
+          return items;
+        }
+
+        let currentProvider = provider || endpoint;
+
+        // This will be removed in a future PR to formally normalize Providers comparisons to be case insensitive
+        if (currentProvider?.toLowerCase() === Providers.OPENROUTER) {
+          currentProvider = Providers.OPENROUTER;
+        }
+
+        const isAzureWithResponsesApi =
+          (currentProvider === EModelEndpoint.azureOpenAI ||
+            endpointType === EModelEndpoint.azureOpenAI) &&
+          useResponsesApi === true;
+
+        if (
+          isDocumentSupportedProvider(endpointType) ||
+          isDocumentSupportedProvider(currentProvider) ||
+          isAzureWithResponsesApi
+        ) {
+          items.push({
+            id: `${prefix}:provider`,
+            label: localize('com_ui_upload_provider'),
+            primary: true,
+            icon: <FileImageIcon className="icon-md" aria-hidden="true" />,
+            onSelect: () => {
+              setToolResource(undefined);
+              let fileType: Exclude<FileUploadType, 'image' | 'document'> = 'image_document';
+              if (
+                currentProvider === Providers.GOOGLE ||
+                currentProvider === Providers.OPENROUTER
+              ) {
+                fileType = 'image_document_video_audio';
+              } else if (
+                currentProvider === Providers.BEDROCK ||
+                endpointType === EModelEndpoint.bedrock
+              ) {
+                fileType = 'image_document_extended';
+              } else if (
+                endpointType === EModelEndpoint.custom &&
+                isExplicitMimeConfig(endpointFileConfig?.supportedMimeTypes)
+              ) {
+                fileType = 'image_document_video_audio_configured';
+              }
+              onAction(fileType);
+            },
+          });
+        } else {
+          items.push({
+            id: `${prefix}:image`,
+            label: localize('com_ui_upload_image_input'),
+            primary: true,
+            icon: <ImageUpIcon className="icon-md" aria-hidden="true" />,
+            onSelect: () => {
+              setToolResource(undefined);
+              onAction('image');
+            },
+          });
+        }
+
+        if (contextEnabled) {
+          items.push({
+            id: `${prefix}:context`,
+            label: localize('com_ui_upload_ocr_text'),
+            icon: <FileType2Icon className="icon-md" aria-hidden="true" />,
+            onSelect: () => {
+              setToolResource(EToolResources.context);
+              onAction();
+            },
+          });
+        }
       }
 
-      if (contextEnabled) {
-        items.push({
-          id: `${prefix}:context`,
-          label: localize('com_ui_upload_ocr_text'),
-          icon: <FileType2Icon className="icon-md" aria-hidden="true" />,
-          onSelect: () => {
-            setToolResource(EToolResources.context);
-            onAction();
-          },
-        });
-      }
-
-      if (fileSearchEnabled && fileSearchAllowedByAgent) {
+      if (fileSearchEnabled && canUseFileSearch && fileSearchAllowedByAgent) {
         items.push({
           id: `${prefix}:file_search`,
           label: localize('com_ui_upload_file_search'),
           icon: <FileSearch className="icon-md" aria-hidden="true" />,
           onSelect: () => {
             setToolResource(EToolResources.file_search);
-            setEphemeralAgent((prev) => ({ ...prev, [EToolResources.file_search]: true }));
             onAction();
           },
         });
       }
 
-      if (codeEnabled && codeAllowedByAgent) {
+      /* Unified code uploads defer provisioning to the environment selected for the turn. */
+      if (!isUnifiedMode && codeEnabled && codeAllowedByAgent) {
         items.push({
           id: `${prefix}:execute_code`,
           label: localize('com_ui_upload_code_environment'),
@@ -476,17 +504,24 @@ export default function useAttachItems({
     };
 
     const local = build(handleUploadClick, 'local');
-    if (sharePointEnabled) {
-      for (const item of build(() => setIsSharePointDialogOpen(true), 'sharepoint')) {
-        local.push({
-          ...item,
-          primary: isUnifiedMode ? item.primary : false,
-          label: isUnifiedMode
+    if (!sharePointEnabled) {
+      return local;
+    }
+    /* SharePoint mirrors every local destination; the tool resource is set by
+       the row itself, then the picker dialog takes over from the input. */
+    for (const item of build(() => setIsSharePointDialogOpen(true), 'sharepoint')) {
+      local.push({
+        ...item,
+        /* Legacy mode folds SharePoint behind the local destination; unified
+           mode keeps both source rows visible in the palette. */
+        primary: isUnifiedMode ? item.primary : false,
+        label:
+          isUnifiedMode && item.primary === true
             ? item.label
             : `${item.label} (${localize('com_files_upload_sharepoint')})`,
-          icon: <SharePointIcon className="icon-md" aria-hidden="true" />,
-        });
-      }
+        icon: <SharePointIcon className="icon-md" aria-hidden="true" />,
+      });
+    }
     }
     return local;
   }, [
@@ -498,6 +533,7 @@ export default function useAttachItems({
     codeEnabled,
     contextEnabled,
     fileSearchEnabled,
+    canUseFileSearch,
     useResponsesApi,
     isUnifiedMode,
     handleUploadClick,

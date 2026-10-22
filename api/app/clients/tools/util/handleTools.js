@@ -48,7 +48,6 @@ const {
   // Basic Tools
   GoogleSearchAPI,
   // Structured Tools
-  DALLE3,
   FluxAPI,
   OpenWeather,
   StructuredSD,
@@ -136,7 +135,6 @@ const getAuthFields = (toolKey) => {
  * @param {LoadToolOptions} [params.options]
  * @param {boolean} [params.useSpecs]
  * @param {Array<string>} params.tools
- * @param {boolean} [params.functions]
  * @param {boolean} [params.returnMap]
  * @param {AppConfig['webSearch']} [params.webSearch]
  * @param {AppConfig['fileStrategy']} [params.fileStrategy]
@@ -152,7 +150,6 @@ const loadTools = async ({
   userMCPAuthMap,
   tools = [],
   options = {},
-  functions = true,
   returnMap = false,
   webSearch,
   fileStrategy,
@@ -241,10 +238,6 @@ const loadTools = async ({
     : true;
   let loggedMCPDenied = false;
 
-  if (functions === true) {
-    toolConstructors.dalle = DALLE3;
-  }
-
   /** @type {ImageGenOptions} */
   const imageGenOptions = {
     isAgent: !!agent,
@@ -257,7 +250,6 @@ const loadTools = async ({
 
   const toolOptions = {
     flux: imageGenOptions,
-    dalle: imageGenOptions,
     'stable-diffusion': imageGenOptions,
     gemini_image_gen: imageGenOptions,
     file_creator: { agentId: agent?.id },

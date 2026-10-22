@@ -20,8 +20,15 @@ export type AdminConfig = {
   principalModel: PrincipalModel;
   priority: number;
   overrides: Partial<TCustomConfig>;
+  /** Dotted paths this principal suppresses from the layers below it. */
+  tombstones?: string[];
   isActive: boolean;
   configVersion: number;
+  /**
+   * `<_id>:<configVersion>`. Sent back as `expectedRevision`, it makes a write apply only to
+   * this exact document; `absent` instead means "only if the principal has no document".
+   */
+  revision?: string;
   tenantId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -35,8 +42,180 @@ export type AdminConfigResponse = {
   config: AdminConfig;
 };
 
+/** A write the server had nothing to apply for; `revision` is the stored document's, if any. */
+export type AdminConfigNoopResponse = {
+  message: string;
+  revision: string | null;
+};
+
+/** 409: the stored document is not at the `expectedRevision` the write named. */
+export type AdminConfigConflictResponse = {
+  error: string;
+  code: 'CONFIG_VERSION_CONFLICT';
+  /** The revision now stored, or `null` when the principal has no document. */
+  currentRevision: string | null;
+};
+
 export type AdminConfigDeleteResponse = {
   success: boolean;
+};
+
+/* ── Admin API request types ────────────────────────────────────────── */
+
+/**
+ * Where a field write lands: a dotted `fieldPath`, which cannot name a key that contains a dot,
+ * or the path's `segments`, which can (`['endpoints', 'bedrock', 'inferenceProfiles',
+ * 'us.anthropic.claude-sonnet-4-5']`). Segments are 1 to 32 non-empty strings, none starting with
+ * `$` or naming `__*`, `constructor` or `prototype`. A segment with a dot is refused (400
+ * `CONFIG_PATH_INVALID`, reason `dotted_segment`) in tombstones, in `mcpServers`, `mcpConfig` and
+ * `langfuse`, and wherever it would split a registered secret's location. DELETE `/fields` takes
+ * `segments` as a JSON-encoded array in the query string.
+ */
+export type AdminConfigFieldTarget =
+  | { fieldPath: string; segments?: never }
+  | { segments: string[]; fieldPath?: never };
+
+/** Optional write precondition: `absent`, or a `revision` the config API returned. */
+export type AdminConfigWritePrecondition = {
+  /** A mismatch answers 409 `CONFIG_VERSION_CONFLICT`; a malformed value 400. */
+  expectedRevision?: string;
+};
+
+/** PATCH `/:principalType/:principalId/fields` */
+export type AdminConfigPatchRequest = AdminConfigWritePrecondition & {
+  entries: Array<AdminConfigFieldTarget & { value: unknown }>;
+  priority?: number;
+};
+
+/** POST `/:principalType/:principalId/fields/tombstone` */
+export type AdminConfigTombstoneRequest = AdminConfigWritePrecondition &
+  AdminConfigFieldTarget & {
+    priority?: number;
+  };
+
+/* ── Admin config contract (GET /api/admin/config/meta) ─────────────── */
+
+/**
+ * Admin config API behaviours a client gates on. A flag is `true` only when the running server
+ * has the behaviour; a server without the meta route (404) has none of them.
+ * - `dottedKeys`: keys containing dots survive writes where the schema has a record (model
+ *   names such as `gpt-4.1`, Bedrock inference profiles, MIME types, header names); a dotted key
+ *   at a fixed-shape position is a `dotted_key` issue, and `$`-prefixed or prototype keys are
+ *   rejected with `CONFIG_UNSAFE_KEY`. Issues carry `segments`, which name a dotted record key
+ *   unambiguously. A database engine that cannot store a dotted key answers 422
+ *   `CONFIG_KEY_NOT_STORABLE` and stores nothing.
+ * - `sectionAllowlist`: writes to a top-level key `configSchema` does not define are rejected,
+ *   and stored ones are ignored at merge.
+ * - `readFilteredWriteResponses`: write responses are filtered by the caller's read access.
+ * - `webSearchStoredKeys`: web search uses a key stored in config (encrypted by the admin API,
+ *   or a `librechat.yaml` literal) at runtime, not only a `${VAR}` reference, and stores
+ *   `webSearch.keenableApiKey` encrypted like the other web search keys. A stored key reaches a
+ *   URL stored in config only when the same layer set both; it is kept over an inherited
+ *   `${VAR}` or default URL. A later layer that changes, blanks or removes the paired URL drops
+ *   the key, and a write that changes or removes the URL beside a stored key must enter the key
+ *   again (400 `CONFIG_SECRET_REENTRY_REQUIRED`).
+ * - `expectedRevision`: every config document a response returns carries `revision`
+ *   (`<id>:<configVersion>`), and a write with nothing to apply answers `{ message, revision }`.
+ *   PUT, PATCH `/fields`, POST `/fields/tombstone` and PATCH `/active` take `expectedRevision` in
+ *   the body, and both DELETE routes take it in the query: `absent` (create-only) or a returned
+ *   revision. A mismatch answers 409 `CONFIG_VERSION_CONFLICT` with `currentRevision` and changes
+ *   nothing; a malformed value answers 400 `INVALID_EXPECTED_REVISION`. Without one, a write that
+ *   loses a race re-reads the document and applies itself again, answering 409 after 3 attempts.
+ * - `prunesEmptyParents`: a field delete or tombstone also removes the objects it leaves empty,
+ *   stopping at arrays (whose elements stay), so no `{}` shell remains; tombstones elsewhere stay.
+ *   A document holding only such shells counts as empty for assign-only lifecycle calls.
+ * - `awaitedInvalidation`: a write answers only after this server has cleared its config caches
+ *   (and, with Redis, told the other instances to clear theirs); GET `/base` merges the stored
+ *   overrides rather than a cached merge, and a merge read before a clear is never cached. A read
+ *   after a write's response therefore shows it; another instance shows it once the broadcast
+ *   arrives, or, without Redis, within `limits.overrideCacheTtlMs`.
+ */
+export type AdminConfigFeatureFlag =
+  | 'dottedKeys'
+  | 'sectionAllowlist'
+  | 'readFilteredWriteResponses'
+  | 'webSearchStoredKeys'
+  | 'expectedRevision'
+  | 'prunesEmptyParents'
+  | 'awaitedInvalidation';
+
+export type AdminConfigFeatures = Record<AdminConfigFeatureFlag, boolean>;
+
+/** A secret config field: encrypted at rest, omitted from reads, kept when a write omits it. */
+export type AdminConfigSecretFieldRule = {
+  path: string;
+  /** Masked-preview companion returned on reads; never writable. */
+  previewPath: string;
+  /** Whether a `${ENV_VAR}` reference is stored and returned as is instead of encrypted. */
+  allowEnvPlaceholder: boolean;
+};
+
+/** A secret held by every item of an array, matched across writes by `identityKey`. */
+export type AdminConfigArraySecretFieldRule = {
+  arrayPath: string;
+  secretKey: string;
+  previewKey: string;
+  identityKey: string;
+};
+
+/** How overrides merge, in override (`librechat.yaml`) key names. */
+export type AdminConfigMergeRules = {
+  /** Arrays merged item by item on a key field instead of replaced. */
+  arrayMergeKeys: Record<string, string>;
+  /** Objects an override replaces whole instead of merging into. */
+  atomicMergePaths: string[];
+  /** Override sections the resolved config (`GET /base`) holds under another name. */
+  overrideKeyMap: Record<string, string>;
+};
+
+export type AdminConfigRules = AdminConfigMergeRules & {
+  /** Top-level sections `configSchema` defines; enforced on writes when `sectionAllowlist`. */
+  acceptedSections: string[];
+  /** Sections only `librechat.yaml` sets; writes to them are dropped. */
+  baseOnlySections: string[];
+  /** Sections only the base (`__base__`) document may hold, through their dedicated APIs. */
+  basePrincipalSections: string[];
+  /** Fields inside overridable sections that only `librechat.yaml` sets. */
+  baseOnlyPaths: string[];
+  secretFields: AdminConfigSecretFieldRule[];
+  arraySecretFields: AdminConfigArraySecretFieldRule[];
+  /** Maps of credentials admin writes are refused for; reads mask their values. */
+  refusedMaps: string[];
+  /** MCP server fields that make a server process-backed; only `librechat.yaml` sets them. */
+  processMcpFields: string[];
+  interface: {
+    /** Interface fields that are role permissions; overrides drop them. */
+    permissionFields: string[];
+    /** Permission fields whose boolean form is a runtime toggle overrides keep. */
+    runtimeFields: string[];
+    /** Sub-keys of an object-form permission field that are permission bits. */
+    permissionSubKeys: string[];
+  };
+  /** Whether `endpoints.all` title settings apply as one block or per field. */
+  titleResolution: 'block' | 'field';
+};
+
+export type AdminConfigMeta = {
+  metaVersion: 1;
+  versions: {
+    /** LibreChat release. */
+    librechat: string;
+    /** `librechat-data-provider` the server validates with. */
+    dataProvider: string;
+    /** `librechat.yaml` schema version. */
+    configSchema: string;
+  };
+  features: AdminConfigFeatures;
+  limits: {
+    /** Most entries one `PATCH /fields` accepts. */
+    maxPatchEntries: number;
+    /**
+     * The app config service's `overrideCacheTtl`: how long another server instance may serve
+     * resolved config from before a write.
+     */
+    overrideCacheTtlMs: number;
+  };
+  rules: AdminConfigRules;
 };
 
 /* ── Audit log taxonomy ─────────────────────────────────────────────── */
