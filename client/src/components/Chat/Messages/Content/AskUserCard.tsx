@@ -8,6 +8,7 @@ import {
   XCircle,
   Loader2,
   Edit3,
+  Code2,
 } from 'lucide-react';
 import { Constants } from 'librechat-data-provider';
 import type { TAttachment } from 'librechat-data-provider';
@@ -133,15 +134,30 @@ function parseArgsObject(rawArgs: string | Record<string, unknown> | undefined):
         return parsed as Record<string, unknown>;
       }
     } catch {
-      // Partial streaming JSON fallback: extract question if possible
-      const qMatch = trimmed.match(/"question"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-      const rMatch = trimmed.match(/"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-      const sMatch = trimmed.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-      return {
-        ...(qMatch ? { question: qMatch[1].replace(/\\"/g, '"') } : {}),
-        ...(rMatch ? { reason: rMatch[1].replace(/\\"/g, '"') } : {}),
-        ...(sMatch ? { summary: sMatch[1].replace(/\\"/g, '"') } : {}),
+      // Partial / streaming JSON fallback: extract parameters if JSON is incomplete or has unescaped characters
+      const extractField = (key: string): string | undefined => {
+        const regex = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 's');
+        const m = trimmed.match(regex);
+        if (m) {
+          return m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\t/g, '\t');
+        }
+        // Incomplete / streaming string fallback (e.g. key started but not terminated by quote)
+        const partialRegex = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)$`, 's');
+        const pm = trimmed.match(partialRegex);
+        if (pm && pm[1].trim()) {
+          return pm[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\t/g, '\t');
+        }
+        return undefined;
       };
+
+      const extracted: Record<string, unknown> = {};
+      for (const k of ['question', 'reason', 'summary', 'prompt', 'repo', 'branch', 'execution_strategy']) {
+        const val = extractField(k);
+        if (val !== undefined && val.trim()) {
+          extracted[k] = val;
+        }
+      }
+      return extracted;
     }
   }
   return {};
@@ -215,9 +231,16 @@ const PARAM_LABELS: Record<string, string> = {
   path: 'Pfad',
   diff: 'Änderungen',
   code: 'Code',
+  repo: 'Repository',
+  branch: 'Branch',
+  execution_strategy: 'Ausführungsmodus',
+  timeout: 'Timeout (Sekunden)',
+  notify_email: 'Abschluss-Mail an',
+  notify_mode: 'Mail-Modus',
 };
 
 const HIDDEN_PARAM_KEYS = new Set([
+  'prompt',
   'reason',
   'question',
   'options',
@@ -331,6 +354,12 @@ export default function AskUserCard({
           ? parsedArgs.reason.trim()
           : '';
       if (reason) return reason;
+      if (typeof parsedArgs.prompt === 'string' && parsedArgs.prompt.trim()) {
+        const firstLine = parsedArgs.prompt.trim().split(/\r?\n/)[0].replace(/^[#\s*-]+/, '').trim();
+        if (firstLine) {
+          return `Soll folgender Coding-Auftrag ausgeführt werden: "${firstLine.slice(0, 140)}"?`;
+        }
+      }
       if (baseName === 'youtrack_create_issue') {
         return 'Der Agent möchte folgendes YouTrack-Ticket erstellen. Möchtest du diese Aktion freigeben?';
       }
@@ -571,6 +600,24 @@ export default function AskUserCard({
         {contextText && (
           <div className="rounded-lg bg-surface-tertiary/50 px-3 py-2 text-xs leading-relaxed text-text-secondary">
             {contextText}
+          </div>
+        )}
+
+        {/* Dedicated Coding Prompt Preview */}
+        {isGate && typeof parsedArgs.prompt === 'string' && parsedArgs.prompt.trim() && (
+          <div className="overflow-hidden rounded-lg border border-border-light bg-surface-primary/70">
+            <div className="flex items-center justify-between border-b border-border-light bg-surface-tertiary/40 px-3 py-1.5 text-xs font-semibold text-text-secondary">
+              <span className="flex items-center gap-1.5">
+                <Code2 className="size-3.5 text-text-secondary" />
+                Geplanter Coding-Prompt / Aufgabenstellung
+              </span>
+              <span className="rounded bg-surface-tertiary px-1.5 py-0.5 text-[10px] font-normal text-text-secondary">
+                {parsedArgs.prompt.trim().length} Zeichen
+              </span>
+            </div>
+            <div className="max-h-56 overflow-y-auto p-3 font-mono text-xs leading-relaxed text-text-primary whitespace-pre-wrap select-text">
+              {parsedArgs.prompt.trim()}
+            </div>
           </div>
         )}
 

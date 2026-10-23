@@ -1432,7 +1432,9 @@ function createToolInstance({
               question: String(
                 toolArguments?.reason ||
                   toolArguments?.question ||
-                  `Soll die Schreib-Aktion "${serverToolName}" ausgeführt werden?`,
+                  (toolArguments?.prompt
+                    ? `Coding-Auftrag: ${String(toolArguments.prompt).trim().split('\n')[0].replace(/^[#\s*-]+/, '').slice(0, 120)}`
+                    : `Soll die Schreib-Aktion "${serverToolName}" ausgeführt werden?`),
               ),
               args: cleanArgs,
               user_id: String(userId || 'default'),
@@ -1490,7 +1492,7 @@ function createToolInstance({
       const effectiveToolTimeout =
         capturedServerConfig?.timeout ||
         ( /^(coding_task|coding_night_shift)$/i.test(serverToolName)
-          ? 1800000
+          ? 14400000
           : WRITE_MCP_TOOL_PATTERN.test(serverToolName)
             ? 600000
             : 300000 );

@@ -414,20 +414,37 @@ const renderInteractiveUserTool: ToolRenderer = ({
   attachments,
   isSubmitting,
   hideAttachments,
-}) => (
-  <AskUserCard
-    toolCallId={toolCallId || toolCall.id || ''}
-    name={toolCall.name || ''}
-    args={toolCall.args ?? ''}
-    output={toolCall.output ?? ''}
-    isSubmitting={isSubmitting}
-    attachments={attachments}
-    hideAttachments={hideAttachments}
-  />
-);
+}) => {
+  const name =
+    toolCall.name ||
+    ((toolCall as unknown as { function?: { name?: string } })?.function?.name ?? '');
+  const args =
+    toolCall.args ??
+    ((toolCall as unknown as { function?: { arguments?: unknown } })?.function?.arguments ?? '');
+  const output =
+    toolCall.output ??
+    ((toolCall as unknown as { function?: { output?: unknown } })?.function?.output ?? '');
+  return (
+    <AskUserCard
+      toolCallId={toolCallId || toolCall.id || ''}
+      name={name}
+      args={args as string | Record<string, unknown>}
+      output={output as string}
+      isSubmitting={isSubmitting}
+      attachments={attachments}
+      hideAttachments={hideAttachments}
+    />
+  );
+};
 
 /** Calls a name alone cannot route: programmatic bash by its arguments, handoffs by prefix. */
-const matchTool = ({ name, args }: AgentToolCall): ToolRenderer | undefined => {
+const matchTool = (toolCall: AgentToolCall): ToolRenderer | undefined => {
+  const name =
+    toolCall.name ||
+    ((toolCall as unknown as { function?: { name?: string } })?.function?.name ?? '');
+  const args =
+    (toolCall as unknown as { args?: unknown }).args ??
+    ((toolCall as unknown as { function?: { arguments?: unknown } })?.function?.arguments ?? '');
   if (isInteractiveUserTool(name, args)) {
     return renderInteractiveUserTool;
   }
