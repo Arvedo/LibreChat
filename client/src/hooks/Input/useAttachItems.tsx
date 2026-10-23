@@ -522,7 +522,6 @@ export default function useAttachItems({
         icon: <SharePointIcon className="icon-md" aria-hidden="true" />,
       });
     }
-    }
     return local;
   }, [
     localize,
