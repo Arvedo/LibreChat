@@ -79,7 +79,23 @@ function applyExtensionManifests(rawConfig) {
     const mcpServers = {};
     for (const ext of active) {
       if (ext.mcp_servers && typeof ext.mcp_servers === 'object') {
-        Object.assign(mcpServers, ext.mcp_servers);
+        for (const [serverKey, serverCfg] of Object.entries(ext.mcp_servers)) {
+          if (serverCfg && typeof serverCfg === 'object') {
+            const copy = { ...serverCfg };
+            if (typeof copy.title === 'string') {
+              const sanitized = copy.title
+                .replace(/&/g, 'and')
+                .replace(/[^a-zA-Z0-9\s'-]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+              copy.title =
+                sanitized ||
+                serverKey.replace(/[^a-zA-Z0-9\s'-]/g, ' ').trim() ||
+                'MCP Server';
+            }
+            mcpServers[serverKey] = copy;
+          }
+        }
       }
     }
 
@@ -111,7 +127,9 @@ function applyExtensionManifests(rawConfig) {
           for (const ep of cfg.endpoints.custom) {
             if (ep && ep.allowFunctionCalling !== false) {
               if (Array.isArray(ep.models?.default) && ep.models.default.length > 0) {
-                ep.models.default = [modelName, ...ep.models.default.slice(1)];
+                if (!ep.models.default.includes(modelName)) {
+                  ep.models.default.unshift(modelName);
+                }
               }
               ep.titleModel = modelName;
               if (ep.tokenConfig && typeof ep.tokenConfig === 'object') {
@@ -127,18 +145,44 @@ function applyExtensionManifests(rawConfig) {
         cfg.memory.agent.model = modelName;
       }
       if (cfg.modelSpecs && Array.isArray(cfg.modelSpecs.list) && cfg.modelSpecs.list.length > 0) {
-        const mainSpec = cfg.modelSpecs.list[0];
-        mainSpec.name = modelName.toLowerCase();
-        mainSpec.label = modelLabel;
-        if (reg.main_agent_description) {
-          mainSpec.description = reg.main_agent_description;
+        const existingIndex = cfg.modelSpecs.list.findIndex(
+          (s) => s && typeof s.name === 'string' && s.name.toLowerCase() === modelName.toLowerCase(),
+        );
+        if (existingIndex >= 0) {
+          const spec = cfg.modelSpecs.list[existingIndex];
+          spec.label = modelLabel;
+          if (reg.main_agent_description) {
+            spec.description = reg.main_agent_description;
+          }
+          spec.default = true;
+          spec.preset = {
+            ...(spec.preset || {}),
+            ...(mainAgentId ? { agent_id: mainAgentId } : {}),
+            model: modelName,
+          };
+          for (let i = 0; i < cfg.modelSpecs.list.length; i++) {
+            if (i !== existingIndex) {
+              cfg.modelSpecs.list[i].default = false;
+            }
+          }
+        } else {
+          for (const spec of cfg.modelSpecs.list) {
+            spec.default = false;
+          }
+          const basePreset = cfg.modelSpecs.list[0]?.preset || {};
+          const tierSpec = {
+            name: modelName.toLowerCase(),
+            label: modelLabel,
+            ...(reg.main_agent_description ? { description: reg.main_agent_description } : {}),
+            default: true,
+            preset: {
+              ...basePreset,
+              ...(mainAgentId ? { agent_id: mainAgentId } : {}),
+              model: modelName,
+            },
+          };
+          cfg.modelSpecs.list.unshift(tierSpec);
         }
-        mainSpec.default = true;
-        mainSpec.preset = {
-          ...(mainSpec.preset || {}),
-          ...(mainAgentId ? { agent_id: mainAgentId } : {}),
-          model: modelName,
-        };
       }
     }
     if (Object.keys(mcpServers).length > 0) {

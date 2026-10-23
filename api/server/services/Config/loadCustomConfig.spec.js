@@ -644,5 +644,116 @@ describe('loadCustomConfig', () => {
         context: 262144,
       });
     });
+
+    it('prepends tier model spec as default and keeps baseline spec available when model_name differs', () => {
+      fs.writeFileSync(
+        path.join(tempExtDir, 'registry.json'),
+        JSON.stringify({
+          model_name: 'TierPlus',
+          model_label: 'Tier Plus',
+          main_agent_id: 'agent_TierPlus01',
+          main_agent_description: 'Tier Plus Agent',
+          active_extensions: [],
+        }),
+      );
+
+      const rawConfig = {
+        endpoints: {
+          custom: [
+            {
+              name: 'Local-Endpoint',
+              allowFunctionCalling: true,
+              models: { default: ['baseline-model', 'other-model'] },
+              tokenConfig: { 'baseline-model': { context: 262144 } },
+            },
+          ],
+        },
+        modelSpecs: {
+          list: [
+            {
+              name: 'baseline-model',
+              label: 'Baseline Model',
+              default: true,
+              preset: { endpoint: 'agents', agent_id: 'agent_Baseline01', model: 'baseline-model' },
+            },
+          ],
+        },
+      };
+
+      loadCustomConfig.applyExtensionManifests(rawConfig);
+
+      expect(rawConfig.endpoints.custom[0].models.default).toEqual([
+        'TierPlus',
+        'baseline-model',
+        'other-model',
+      ]);
+      expect(rawConfig.modelSpecs.list).toHaveLength(2);
+      expect(rawConfig.modelSpecs.list[0]).toEqual({
+        name: 'tierplus',
+        label: 'Tier Plus',
+        description: 'Tier Plus Agent',
+        default: true,
+        preset: {
+          endpoint: 'agents',
+          agent_id: 'agent_TierPlus01',
+          model: 'TierPlus',
+        },
+      });
+      expect(rawConfig.modelSpecs.list[1]).toEqual({
+        name: 'baseline-model',
+        label: 'Baseline Model',
+        default: false,
+        preset: {
+          endpoint: 'agents',
+          agent_id: 'agent_Baseline01',
+          model: 'baseline-model',
+        },
+      });
+    });
+
+    it('updates existing spec in place without duplicating when model_name matches existing spec', () => {
+      fs.writeFileSync(
+        path.join(tempExtDir, 'registry.json'),
+        JSON.stringify({
+          model_name: 'Baseline-Model',
+          model_label: 'Baseline Model Updated',
+          main_agent_id: 'agent_Baseline01',
+          main_agent_description: 'Updated Description',
+          active_extensions: [],
+        }),
+      );
+
+      const rawConfig = {
+        endpoints: {
+          custom: [
+            {
+              name: 'Local-Endpoint',
+              allowFunctionCalling: true,
+              models: { default: ['Baseline-Model', 'other-model'] },
+              tokenConfig: {},
+            },
+          ],
+        },
+        modelSpecs: {
+          list: [
+            {
+              name: 'Baseline-Model',
+              label: 'Baseline Model',
+              default: true,
+              preset: { endpoint: 'agents', agent_id: 'agent_Baseline01', model: 'Baseline-Model' },
+            },
+          ],
+        },
+      };
+
+      loadCustomConfig.applyExtensionManifests(rawConfig);
+
+      expect(rawConfig.endpoints.custom[0].models.default).toEqual(['Baseline-Model', 'other-model']);
+      expect(rawConfig.modelSpecs.list).toHaveLength(1);
+      expect(rawConfig.modelSpecs.list[0].label).toBe('Baseline Model Updated');
+      expect(rawConfig.modelSpecs.list[0].description).toBe('Updated Description');
+      expect(rawConfig.modelSpecs.list[0].default).toBe(true);
+    });
+    });
   });
 });
