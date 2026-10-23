@@ -1405,7 +1405,7 @@ function createToolInstance({
         config?.configurable?.userMCPAuthMap?.[`${Constants.mcp_prefix}${serverName}`];
 
       const WRITE_MCP_TOOL_PATTERN =
-        /^(youtrack_create_issue|youtrack_update_issue|coding_task|code_change)$|(?:^|_)(create|update|delete|remove|write|modify|edit|patch|send|close|assign|comment)(?:_|$)/i;
+        /^(youtrack_create_issue|youtrack_update_issue|coding_task|coding_night_shift|code_change)$|(?:^|_)(create|update|delete|remove|write|modify|edit|patch|send|close|assign|comment)(?:_|$)/i;
       let gateStateMarker = '';
       if (WRITE_MCP_TOOL_PATTERN.test(serverToolName)) {
         if (toolArguments && typeof toolArguments === 'object') {

@@ -18,11 +18,12 @@ export const GATED_TOOL_BASE_NAMES = new Set([
   'youtrack_create_issue',
   'youtrack_update_issue',
   'coding_task',
+  'coding_night_shift',
   'code_change',
 ]);
 
 export const WRITE_TOOL_NAME_PATTERN =
-  /^(youtrack_create_issue|youtrack_update_issue|coding_task|code_change)$|(?:^|_)(create|update|delete|remove|write|modify|edit|patch|send|close|assign|comment)(?:_|$)/i;
+  /^(youtrack_create_issue|youtrack_update_issue|coding_task|coding_night_shift|code_change)$|(?:^|_)(create|update|delete|remove|write|modify|edit|patch|send|close|assign|comment)(?:_|$)/i;
 
 export const ACTION_GATED_TOOLS = new Set([
   'agent_creator',
@@ -170,7 +171,13 @@ const GATE_LABELS: Record<
   coding_task: {
     badge: 'Freigabe erforderlich',
     title: 'Coding-Auftrag starten',
-    approveOption: 'Ja, Coding-Auftrag jetzt umsetzen',
+    approveOption: 'Ja, Coding-Auftrag jetzt umsetzen (Extra High)',
+    declineOption: 'Nein, abbrechen',
+  },
+  coding_night_shift: {
+    badge: 'Freigabe erforderlich',
+    title: 'Ultracode-Nachtschicht einplanen (ab 00:00 FIFO)',
+    approveOption: 'Ja, für Nachtschicht ab 00:00 Uhr in FIFO-Queue einplanen (Ultracode)',
     declineOption: 'Nein, abbrechen',
   },
   code_change: {
@@ -258,6 +265,21 @@ export default function AskUserCard({
 
   const options = useMemo(() => {
     if (isGate && gateMeta) {
+      if (baseName === 'coding_task' || baseName === 'coding_night_shift') {
+        const strat = String(parsedArgs.execution_strategy || '').toLowerCase();
+        const isNight = baseName === 'coding_night_shift' || strat.includes('overnight') || strat.includes('night') || strat.includes('ultracode');
+        return isNight
+          ? [
+              'Ja, für Nachtschicht ab 00:00 Uhr in FIFO-Queue einplanen (Ultracode)',
+              'Jetzt sofort mit Extra High ausführen',
+              'Nein, abbrechen',
+            ]
+          : [
+              'Ja, Coding-Auftrag jetzt umsetzen (Extra High)',
+              'Ja, für Nachtschicht ab 00:00 Uhr in FIFO-Queue einplanen (Ultracode)',
+              'Nein, abbrechen',
+            ];
+      }
       return [gateMeta.approveOption, gateMeta.declineOption];
     }
     const rawOpts = parsedArgs.options;
