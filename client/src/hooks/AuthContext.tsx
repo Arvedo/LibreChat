@@ -25,6 +25,8 @@ import {
 import type * as t from 'librechat-data-provider';
 import type { ReactNode } from 'react';
 import {
+  isSpaRoute,
+  withBasePath,
   clearTTSCache,
   isSafeRedirect,
   setTTSCacheOwner,
@@ -160,6 +162,11 @@ const AuthContextProvider = ({
           return;
         }
 
+        if (!isSpaRoute(finalRedirect)) {
+          window.location.replace(withBasePath(finalRedirect));
+          return;
+        }
+
         navigate(finalRedirect, { replace: true });
       }, 50),
     [navigate, setUser, setQueriesEnabled],
@@ -272,6 +279,10 @@ const AuthContextProvider = ({
       openFileDeletionRetention();
       setTTSCacheOwner(authenticatedUser.id);
       setPullRequestSessionOwner(authenticatedUser.id);
+      if (!isSpaRoute(redirect)) {
+        window.location.replace(withBasePath(redirect));
+        return;
+      }
       navigate(redirect, { replace: true });
     },
     [navigate, setQueriesEnabled, setUser],
