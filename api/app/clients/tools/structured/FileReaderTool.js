@@ -91,17 +91,99 @@ class FileReaderTool extends Tool {
     }
   }
 
+  _stripHtmlPreviewWrapper(rawHtml) {
+    if (!rawHtml || typeof rawHtml !== 'string') return '';
+    let s = rawHtml;
+    const fallbackMatch = s.match(/<div[^>]*id=["']lc-fallback["'][^>]*>([\s\S]*?)<\/div>\s*<script/i);
+    if (fallbackMatch && fallbackMatch[1]) {
+      s = fallbackMatch[1];
+    }
+    s = s
+      .replace(/<div[^>]*id=["']lc-fallback-notice["'][^>]*>[\s\S]*?<\/div>/gi, '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<head[\s\S]*?<\/head>/gi, '')
+      .replace(/<\/(p|div|h[1-6]|li|tr|blockquote|section)>/gi, '\n')
+      .replace(/<(br|hr)\s*\/?>/gi, '\n')
+      .replace(/<\/(td|th)>/gi, ' | ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return s;
+  }
+
+  _extractDocxFromDisk(localPath) {
+    if (!localPath) return '';
+    try {
+      const { execFileSync } = require('child_process');
+      const pyScript = [
+        'import sys, zipfile, xml.etree.ElementTree as ET',
+        'p = sys.argv[1]',
+        'parts = []',
+        'with zipfile.ZipFile(p, "r") as zf:',
+        '    if "word/document.xml" in zf.namelist():',
+        '        root = ET.fromstring(zf.read("word/document.xml"))',
+        '        ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"',
+        '        for para in root.iter(ns + "p"):',
+        '            line = "".join(t.text for t in para.iter(ns + "t") if t.text).strip()',
+        '            if line:',
+        '                parts.append(line)',
+        'print("\\n".join(parts))',
+      ].join('\n');
+      const extracted = execFileSync('python3', ['-c', pyScript, localPath], {
+        encoding: 'utf-8',
+        timeout: 15000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      if (extracted && extracted.trim()) {
+        return extracted.trim();
+      }
+    } catch (e) {
+      logger.debug(`[FileReaderTool] Direct DOCX XML extraction failed: ${e.message}`);
+    }
+    return '';
+  }
+
   async _extractFileText(f) {
-    if (f.text && f.text.trim().length > 0) {
-      return f.text.trim();
+    const localPath = this._resolveLocalPath(f.filepath);
+    const ext = path.extname(f.filename || localPath || '').toLowerCase();
+    const isDocx =
+      ext === '.docx' ||
+      ext === '.doc' ||
+      (f.type && f.type.includes('wordprocessingml')) ||
+      f.type === 'application/msword';
+    const isHtmlPreview =
+      f.textFormat === 'html' ||
+      (typeof f.text === 'string' && /^\s*(<!DOCTYPE\s+html|<html\b)/i.test(f.text));
+
+    if (isDocx && localPath) {
+      const cleanDocx = this._extractDocxFromDisk(localPath);
+      if (cleanDocx) {
+        return cleanDocx;
+      }
     }
 
-    const localPath = this._resolveLocalPath(f.filepath);
+    if (f.text && f.text.trim().length > 0) {
+      if (isHtmlPreview) {
+        const stripped = this._stripHtmlPreviewWrapper(f.text);
+        if (stripped) {
+          return stripped;
+        }
+      } else {
+        return f.text.trim();
+      }
+    }
+
     if (!localPath) {
       return '';
     }
 
-    const ext = path.extname(f.filename || localPath).toLowerCase();
     const isImage = IMAGE_EXTENSIONS.has(ext) || (f.type && f.type.startsWith('image/'));
     const isPdf = ext === '.pdf' || f.type === 'application/pdf';
 

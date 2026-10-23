@@ -1457,6 +1457,14 @@ function createToolInstance({
           ) {
             toolArguments = { ...toolArguments, gate_token: gateData.gate_token };
           }
+          if (
+            gateData.execution_strategy &&
+            toolArguments &&
+            typeof toolArguments === 'object' &&
+            schema?.properties?.execution_strategy
+          ) {
+            toolArguments = { ...toolArguments, execution_strategy: gateData.execution_strategy };
+          }
         } catch (gateErr) {
           logger.error(
             `[MCP] Mandatory user approval gate failed for write tool ${serverToolName}; blocking execution: ${gateErr?.message}`,
@@ -1479,6 +1487,13 @@ function createToolInstance({
        * is required for OBO since the grant sends the access token to the IdP
        * as the jwt-bearer assertion.
        */
+      const effectiveToolTimeout =
+        capturedServerConfig?.timeout ||
+        ( /^(coding_task|coding_night_shift)$/i.test(serverToolName)
+          ? 1800000
+          : WRITE_MCP_TOOL_PATTERN.test(serverToolName)
+            ? 600000
+            : 300000 );
       const result = await mcpManager.callTool({
         scheduledBearerInvocation,
         scheduledMCPInvocation,
@@ -1491,6 +1506,7 @@ function createToolInstance({
         toolArguments,
         options: {
           signal: derivedSignal,
+          timeout: effectiveToolTimeout,
         },
         user: effectiveUser,
         requestBody: config?.configurable?.requestBody ?? capturedRequestBody,
