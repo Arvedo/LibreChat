@@ -176,8 +176,8 @@ const GATE_LABELS: Record<
   },
   coding_night_shift: {
     badge: 'Freigabe erforderlich',
-    title: 'Ultracode-Nachtschicht einplanen (ab 00:00 FIFO)',
-    approveOption: 'Ja, für Nachtschicht ab 00:00 Uhr in FIFO-Queue einplanen (Ultracode)',
+    title: 'Ultracode-Nachtschicht einplanen (19:00–06:00 FIFO bei AI-Idle)',
+    approveOption: 'Ja, für Nachtschicht (19:00–06:00 Uhr bei AI-Idle) in FIFO-Queue einplanen (Ultracode)',
     declineOption: 'Nein, abbrechen',
   },
   code_change: {
@@ -270,13 +270,13 @@ export default function AskUserCard({
         const isNight = baseName === 'coding_night_shift' || strat.includes('overnight') || strat.includes('night') || strat.includes('ultracode');
         return isNight
           ? [
-              'Ja, für Nachtschicht ab 00:00 Uhr in FIFO-Queue einplanen (Ultracode)',
+              'Ja, für Nachtschicht (19:00–06:00 Uhr bei AI-Idle) in FIFO-Queue einplanen (Ultracode)',
               'Jetzt sofort mit Extra High ausführen',
               'Nein, abbrechen',
             ]
           : [
               'Ja, Coding-Auftrag jetzt umsetzen (Extra High)',
-              'Ja, für Nachtschicht ab 00:00 Uhr in FIFO-Queue einplanen (Ultracode)',
+              'Ja, für Nachtschicht (19:00–06:00 Uhr bei AI-Idle) in FIFO-Queue einplanen (Ultracode)',
               'Nein, abbrechen',
             ];
       }
