@@ -281,7 +281,7 @@ export default function DocumentSuiteSearchDialog({
         buttons={
           <div className="flex w-full items-center justify-between pt-2">
             <a
-              href="/document-processor/"
+              href="/dateien/"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs text-primary hover:underline"

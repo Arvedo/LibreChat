@@ -349,7 +349,7 @@ export default function useAttachItems({
           primary: true,
           icon: <ExternalLink className="icon-md text-amber-500" aria-hidden="true" />,
           onSelect: () => {
-            window.open('/document-processor/', '_blank', 'noopener,noreferrer');
+            window.open('/dateien/', '_blank', 'noopener,noreferrer');
           },
         },
       ];
