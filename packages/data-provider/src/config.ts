@@ -2996,6 +2996,24 @@ export const isAllDataRetention = (mode?: RetentionMode | null): boolean =>
 export const isForcedTemporaryRetention = (mode?: RetentionMode | null): boolean =>
   mode === RetentionMode.EPHEMERAL;
 
+export const attributionSchema = z.object({
+  enabled: z.boolean().optional().default(false),
+  anchor: z.string().trim().min(1).max(80).optional(),
+  partners: z.array(z.string().trim().min(1).max(80)).max(32).optional().default([]),
+  includeOthers: z.boolean().optional().default(true),
+  includeStandalone: z.boolean().optional().default(true),
+  licensesUrl: z
+    .string()
+    .trim()
+    .refine((v) => (v.startsWith('/') && !v.startsWith('//')) || /^https?:\/\//i.test(v), {
+      message: 'licensesUrl must be a root-relative path or http(s) URL',
+    })
+    .optional()
+    .default('/licenses.json'),
+});
+
+export type TAttributionConfig = z.infer<typeof attributionSchema>;
+
 export const interfaceSchema = z
   .object({
     theme: deploymentThemeSchema.optional(),
@@ -3102,6 +3120,7 @@ export const interfaceSchema = z
     fileSearch: z.boolean().optional(),
     fileCitations: z.boolean().optional(),
     traceViewer: traceViewerSchema.optional(),
+    attribution: attributionSchema.optional(),
     /** Tool keys (and `'mcp'` or an MCP server name) pinned to the prompt bar by default */
     defaultPinnedTools: z.array(z.string()).optional(),
     buildInfo: z.boolean().optional(),

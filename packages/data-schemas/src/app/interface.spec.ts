@@ -473,6 +473,28 @@ describe('loadDefaultInterface', () => {
 
     expect(interfaceConfig).not.toHaveProperty('theme');
   });
+
+  it('passes configured attribution through loadDefaultInterface and omits it when unset', async () => {
+    const unset = await loadDefaultInterface({
+      config: {},
+      configDefaults: getConfigDefaults(),
+    });
+    expect(unset).not.toHaveProperty('attribution');
+
+    const attribution = {
+      enabled: true,
+      anchor: 'ModelA',
+      partners: ['PartnerB'],
+      includeOthers: true,
+      includeStandalone: true,
+      licensesUrl: '/licenses.json',
+    };
+    const configured = await loadDefaultInterface({
+      config: { interface: { attribution } },
+      configDefaults: getConfigDefaults(),
+    });
+    expect(configured?.attribution).toEqual(attribution);
+  });
 });
 
 describe('running chat rename deployment fence', () => {

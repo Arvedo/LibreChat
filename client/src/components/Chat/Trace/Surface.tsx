@@ -31,7 +31,7 @@ export default function TraceSurface({
       {/* `isolate` while covered: the chat's own layers (the message rail sits at
           z-40) would otherwise stack above the trace. */}
       <div
-        className={cn('flex h-full w-full flex-col', open && 'isolate')}
+        className={cn('@container relative flex h-full w-full flex-col', open && 'isolate')}
         inert={open ? '' : undefined}
       >
         {children}

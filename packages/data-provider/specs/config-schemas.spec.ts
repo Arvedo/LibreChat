@@ -2180,3 +2180,50 @@ describe('outboundTimeoutsSchema', () => {
     expect(outboundTimeoutsSchema.safeParse({ actionsMs: value }).success).toBe(false);
   });
 });
+
+describe('interfaceSchema attribution', () => {
+  it('leaves attribution undefined by default when omitted', () => {
+    const parsed = interfaceSchema.parse({});
+    expect(parsed.attribution).toBeUndefined();
+  });
+
+  it('parses configured attribution fields with defaults', () => {
+    const parsed = interfaceSchema.parse({
+      attribution: {
+        enabled: true,
+        anchor: ' ModelA ',
+        partners: [' PartnerB ', 'PartnerC'],
+      },
+    });
+    expect(parsed.attribution).toEqual({
+      enabled: true,
+      anchor: 'ModelA',
+      partners: ['PartnerB', 'PartnerC'],
+      includeOthers: true,
+      includeStandalone: true,
+      licensesUrl: '/licenses.json',
+    });
+  });
+
+  it('rejects protocol-relative or unsafe licensesUrl schemes', () => {
+    expect(
+      interfaceSchema.safeParse({
+        attribution: { enabled: true, anchor: 'ModelA', licensesUrl: '//evil.example/x.json' },
+      }).success,
+    ).toBe(false);
+    expect(
+      interfaceSchema.safeParse({
+        attribution: { enabled: true, anchor: 'ModelA', licensesUrl: 'javascript:alert(1)' },
+      }).success,
+    ).toBe(false);
+    expect(
+      interfaceSchema.safeParse({
+        attribution: {
+          enabled: true,
+          anchor: 'ModelA',
+          licensesUrl: 'https://example.org/licenses.json',
+        },
+      }).success,
+    ).toBe(true);
+  });
+});

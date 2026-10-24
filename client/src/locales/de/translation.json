@@ -2238,5 +2238,15 @@
   "com_ui_zoom_in": "Heranzoomen",
   "com_ui_zoom_level": "Zoomstufe",
   "com_ui_zoom_out": "Herauszoomen",
-  "com_user_message": "Du"
+  "com_user_message": "Du",
+  "com_ui_attribution_powered_by": "Powered by {{anchor}}",
+  "com_ui_attribution_powered_by_partner": "Powered by {{anchor}} und {{partner}}",
+  "com_ui_attribution_powered_by_others": "Powered by {{anchor}} und weiteren",
+  "com_ui_open_source_licenses": "Open-Source-Lizenzen",
+  "com_ui_open_source_licenses_desc": "Lizenzen und Danksagungen für KI-Modelle, Frameworks und Open-Source-Komponenten.",
+  "com_ui_open_source_licenses_view": "Lizenzen anzeigen",
+  "com_ui_open_source_licenses_search": "Komponenten oder Lizenzen filtern...",
+  "com_ui_open_source_licenses_all": "Alle",
+  "com_ui_open_source_licenses_empty": "Keine Lizenzeinträge gefunden.",
+  "com_ui_open_source_licenses_show_text": "Lizenztext"
 }
