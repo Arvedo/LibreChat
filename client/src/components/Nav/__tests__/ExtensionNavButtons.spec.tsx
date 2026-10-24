@@ -27,11 +27,11 @@ describe('ExtensionNavButtons', () => {
     cleanup();
   });
 
-  it('renders Document Processor and Mailer links when enabled', () => {
+  it('renders Dateien and Mailer links when enabled', () => {
     render(<ExtensionNavButtons />);
     const docLink = screen.getByTestId('nav-document-processor-button');
     const mailerLink = screen.getByTestId('nav-mailer-button');
-    expect(docLink).toHaveAttribute('href', '/document-processor/');
+    expect(docLink).toHaveAttribute('href', '/dateien/');
     expect(mailerLink).toHaveAttribute('href', '/mailer/');
   });
 

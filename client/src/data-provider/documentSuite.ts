@@ -21,7 +21,7 @@ export interface LibraryDatasetItem {
   created_at: string;
 }
 
-const BASE_URL = '/document-processor/api';
+const BASE_URL = '/dateien/api';
 
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   const tokenHeader = getTokenHeader();

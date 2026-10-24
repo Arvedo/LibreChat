@@ -28,8 +28,8 @@ function ExtensionNavButtons({
       ? {
           id: 'doc-processor-nav-btn',
           testId: 'nav-document-processor-button',
-          href: '/document-processor/',
-          label: 'Document Processor',
+          href: '/dateien/',
+          label: 'Dateien',
           Icon: FileText,
         }
       : null,
