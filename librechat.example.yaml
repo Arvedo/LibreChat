@@ -378,6 +378,24 @@ interface:
   #   requestsPerMinute: 30
   #   # Budget for each request to Langfuse, in milliseconds (1000-300000).
   #   requestTimeoutMs: 10000
+  # Model & open-source attribution badge and license catalog modal (default: disabled).
+  # Displays a subtle bottom-inline-end pill on wide chat panes (@min-[82rem]) and an
+  # Open-Source Licenses row in Settings -> About (including when buildInfo is false).
+  # Both open a searchable, category-filtered modal reading a JSON catalog ({ entries: [...] }).
+  # See docs/attribution.md for full configuration and /licenses.json payload details.
+  # attribution:
+  #   # Enable the attribution pill and the Open-Source Licenses section in Settings -> About.
+  #   enabled: false
+  #   # Primary model or project name anchored in the pill (1-80 chars; required for the chat pill to render).
+  #   anchor: 'Model'
+  #   # Partner projects/libraries rotated per browser session ("Powered by <anchor> and <partner>", max 32).
+  #   partners: []
+  #   # Include the "Powered by <anchor> and others" variant in the session rotation pool (default: true).
+  #   includeOthers: true
+  #   # Include the standalone "Powered by <anchor>" variant in the session rotation pool (default: true).
+  #   includeStandalone: true
+  #   # Root-relative path or http(s) URL serving the JSON license catalog (default: '/licenses.json').
+  #   licensesUrl: '/licenses.json'
   # Tools pinned to the prompt bar by default for all users.
   # Only seeds the initial state — once a user pins/unpins a tool, their choice is kept.
   # Valid tool keys: artifacts, execute_code, web_search, file_search, skills.

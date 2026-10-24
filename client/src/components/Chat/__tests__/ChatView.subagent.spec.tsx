@@ -75,6 +75,7 @@ jest.mock('../Presentation', () => ({ children }: { children: React.ReactNode })
 jest.mock('../Input/ChatForm', () => () => <div data-testid="chat-form" />);
 jest.mock('../Landing', () => () => <div data-testid="landing" />);
 jest.mock('~/components/Lia', () => () => null);
+jest.mock('../AttributionBadge', () => () => null);
 jest.mock('../Trace', () => ({
   TraceSurface: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -96,6 +97,7 @@ jest.mock('~/store', () => ({
   __esModule: true,
   default: {
     centerFormOnLanding: {},
+    maximizeChatSpace: {},
   },
 }));
 

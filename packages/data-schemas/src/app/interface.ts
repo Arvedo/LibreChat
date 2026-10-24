@@ -82,6 +82,8 @@ export async function loadDefaultInterface({
     fileSearch: interfaceConfig?.fileSearch,
     fileCitations: interfaceConfig?.fileCitations,
     traceViewer: interfaceConfig?.traceViewer,
+    /** Model & open-source attribution badge and license modal config (forwarded when configured). */
+    attribution: interfaceConfig?.attribution,
     defaultPinnedTools: interfaceConfig?.defaultPinnedTools,
     peoplePicker: interfaceConfig?.peoplePicker,
     marketplace: interfaceConfig?.marketplace,

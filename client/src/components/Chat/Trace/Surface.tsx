@@ -29,9 +29,11 @@ export default function TraceSurface({
   return (
     <div className="relative flex h-full w-full flex-col">
       {/* `isolate` while covered: the chat's own layers (the message rail sits at
-          z-40) would otherwise stack above the trace. */}
+          z-40) would otherwise stack above the trace. `@container relative` scopes
+          container-query children (such as AttributionBadge at `@min-[82rem]`) to the
+          chat pane's own width rather than the full viewport. */}
       <div
-        className={cn('flex h-full w-full flex-col', open && 'isolate')}
+        className={cn('@container relative flex h-full w-full flex-col', open && 'isolate')}
         inert={open ? '' : undefined}
       >
         {children}
