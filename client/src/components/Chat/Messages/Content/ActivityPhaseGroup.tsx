@@ -545,7 +545,6 @@ export default function ActivityPhaseGroup({
   showCursor = false,
   animateEntrance = false,
   hasPendingApproval = false,
-  defaultExpanded = false,
   liveParts,
   spanParts,
   onExpansionChange,
@@ -563,7 +562,6 @@ export default function ActivityPhaseGroup({
   showCursor?: boolean;
   animateEntrance?: boolean;
   hasPendingApproval?: boolean;
-  defaultExpanded?: boolean;
   /** The span's parts while the run is still writing it. Present, the header
    *  reads the newest activity out of them — throttled — instead of a
    *  generated label, and renders as a live row rather than a settled one. */
@@ -613,7 +611,7 @@ export default function ActivityPhaseGroup({
    *  them (border, background, padding, divider) is gone, and with it the
    *  sideways step its inset used to impose on every folded row. */
   const foldsIn = shouldAnimateEntrance && hasContent;
-  const [isExpanded, setIsExpanded] = useState(foldsIn || defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState(foldsIn);
   const [isSettled, setIsSettled] = useState(!foldsIn);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
@@ -639,7 +637,7 @@ export default function ActivityPhaseGroup({
   const cancelEntranceRef = useRef<(() => void) | null>(null);
   const cancelLayoutReconcileRef = useRef<(() => void) | null>(null);
   const previousIsExpandedRef = useRef(isExpanded);
-  const userOverrideRef = useRef(defaultExpanded);
+  const userOverrideRef = useRef(false);
   const { style: expandStyle, ref: expandRef } = useExpandCollapse(isExpanded);
   /** A phase label can resolve while an approval card inside it is still
    *  pending (see ApprovalContext), and ToolApproval owns unsent local
