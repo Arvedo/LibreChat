@@ -179,6 +179,8 @@ const Reasoning = memo((props: ReasoningProps) => {
   const [isBarVisible, setIsBarVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { ref: headerRef, inViewport: headerInViewport, recheck: recheckHeader } = useInViewport();
+  const { style: expandStyle, ref: expandRef } = useExpandCollapse(isExpanded);
+  const { shouldRenderBody, mountBody, handleTransitionEnd } = useLazyCollapseBody(isExpanded);
   const { isSubmitting, isLatestMessage, nextType } = useMessage();
   const effectiveIsSubmitting = isLatestMessage ? isSubmitting : false;
   const streaming = effectiveIsSubmitting === true && isLast;
@@ -187,10 +189,6 @@ const Reasoning = memo((props: ReasoningProps) => {
     () => displayReasoning(reasoning, streaming),
     [reasoning, streaming],
   );
-  const hasReasoningText = Boolean(reasoningText);
-  const effectiveExpanded = isExpanded && hasReasoningText;
-  const { style: expandStyle, ref: expandRef } = useExpandCollapse(effectiveExpanded);
-  const { shouldRenderBody, mountBody, handleTransitionEnd } = useLazyCollapseBody(isExpanded);
 
   const handleClick = useCallback(
     (e: MouseEvent<HTMLButtonElement>) => {
@@ -233,7 +231,7 @@ const Reasoning = memo((props: ReasoningProps) => {
       : localize('com_ui_thoughts');
   }, [effectiveIsSubmitting, isLast, localize, reasoningLabel]);
 
-  if (!reasoningText && !streaming) {
+  if (!reasoningText) {
     return null;
   }
 
@@ -249,7 +247,7 @@ const Reasoning = memo((props: ReasoningProps) => {
       <div className="group/thinking-container">
         <div className="mb-2 pt-2 pb-2" ref={headerRef}>
           <ThinkingButton
-            isExpanded={effectiveExpanded}
+            isExpanded={isExpanded}
             onClick={handleClick}
             label={label}
             content={reasoningText}
@@ -267,29 +265,24 @@ const Reasoning = memo((props: ReasoningProps) => {
           id={contentId}
           role="group"
           aria-label={label}
-          aria-hidden={!effectiveExpanded || undefined}
+          aria-hidden={!isExpanded || undefined}
           style={expandStyle}
           onTransitionEnd={handleTransitionEnd}
         >
           <div
-            className={cn(
-              'overflow-hidden',
-              hasReasoningText && nextType !== ContentTypes.THINK && 'pb-4',
-            )}
+            className={cn('overflow-hidden', nextType !== ContentTypes.THINK && 'pb-4')}
             ref={expandRef}
           >
-            {shouldRenderBody && hasReasoningText && (
+            {shouldRenderBody && (
               <div className="relative">
                 <ThinkingContent
-                  animate={
-                    smoothStreaming && effectiveIsSubmitting && isLast && effectiveExpanded
-                  }
+                  animate={smoothStreaming && effectiveIsSubmitting && isLast && isExpanded}
                 >
                   {reasoningText}
                 </ThinkingContent>
                 <FloatingThinkingBar
-                  isVisible={isBarVisible && effectiveExpanded && !headerInViewport}
-                  isExpanded={effectiveExpanded}
+                  isVisible={isBarVisible && isExpanded && !headerInViewport}
+                  isExpanded={isExpanded}
                   onClick={handleClick}
                   content={reasoningText}
                   contentId={contentId}
@@ -350,18 +343,17 @@ export const ReasoningCompact = memo(
       inViewport: headerInViewport,
       recheck: recheckHeader,
     } = useInViewport();
-    const reasoningText = useMemo(
-      () => displayReasoning(reasoning, isStreaming),
-      [reasoning, isStreaming],
-    );
-    const hasReasoningText = Boolean(reasoningText);
-    const effectiveExpanded = isExpanded && hasReasoningText;
-    const { style: expandStyle, ref: expandRef } = useExpandCollapse(effectiveExpanded);
+    const { style: expandStyle, ref: expandRef } = useExpandCollapse(isExpanded);
     /** Collapsed is the default whenever thoughts are hidden, and a streaming
      *  THINK part re-renders on every delta. Keeping the full text mounted
      *  behind the invisible panel made long reasoning streams progressively
      *  more expensive on top of the visible peek. */
     const { shouldRenderBody, mountBody, handleTransitionEnd } = useLazyCollapseBody(isExpanded);
+
+    const reasoningText = useMemo(
+      () => displayReasoning(reasoning, isStreaming),
+      [reasoning, isStreaming],
+    );
 
     const handleToggle = useCallback(
       (e: MouseEvent<HTMLButtonElement>) => {
@@ -395,7 +387,7 @@ export const ReasoningCompact = memo(
       }
     }, []);
 
-    if (!reasoningText && !isStreaming) {
+    if (!reasoningText) {
       return null;
     }
 
@@ -412,7 +404,7 @@ export const ReasoningCompact = memo(
           <Button
             variant="disclosure"
             onClick={handleToggle}
-            aria-expanded={effectiveExpanded}
+            aria-expanded={isExpanded}
             aria-controls={contentId}
             className="group/disclosure text-text-secondary min-w-0 flex-1 font-normal"
           >
@@ -422,13 +414,13 @@ export const ReasoningCompact = memo(
             <span className="tool-status-text font-medium">{label}</span>
             <ChevronDown
               className={cn(
-                disclosureChevronVariants({ expanded: effectiveExpanded }),
+                disclosureChevronVariants({ expanded: isExpanded }),
                 'size-4 translate-y-[1px]',
               )}
               aria-hidden="true"
             />
           </Button>
-          {effectiveExpanded && (
+          {isExpanded && (
             <CopyButton
               isCopied={isCopied}
               iconOnly
@@ -448,17 +440,17 @@ export const ReasoningCompact = memo(
           id={contentId}
           role="group"
           aria-label={label}
-          aria-hidden={!effectiveExpanded || undefined}
+          aria-hidden={!isExpanded || undefined}
           style={expandStyle}
           onTransitionEnd={handleTransitionEnd}
         >
           <div className="overflow-hidden" ref={expandRef}>
-            {shouldRenderBody && hasReasoningText && (
+            {shouldRenderBody && (
               <div className="border-border-light bg-surface-secondary text-text-secondary relative my-2 rounded-2xl border p-4">
                 <p className={cn('leading-6.5 whitespace-pre-wrap', fontSize)}>{reasoningText}</p>
                 <FloatingThinkingBar
-                  isVisible={isBarVisible && effectiveExpanded && !headerInViewport}
-                  isExpanded={effectiveExpanded}
+                  isVisible={isBarVisible && isExpanded && !headerInViewport}
+                  isExpanded={isExpanded}
                   onClick={handleToggle}
                   content={reasoningText}
                   contentId={contentId}

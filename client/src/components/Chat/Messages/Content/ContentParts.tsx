@@ -1080,16 +1080,6 @@ const ContentPartsBody = memo(function ContentPartsBody({
         if (segment.type !== 'phase') {
           return false;
         }
-        if (
-          segment.synthesized === true &&
-          (segment.live === true
-            ? (showThinking &&
-                segment.content.some((part) => part?.type === ContentTypes.THINK)) ||
-              segment.content.some(blocksLiveFold)
-            : segment.content.some((part) => part != null && hasPendingApprovalInPart(part)))
-        ) {
-          return false;
-        }
         return segment.synthesized === true
           ? segment.contentIndices.map(absoluteIndexAt).includes(lastContentIdx)
           : absoluteIndexAt(segment.labelIndex) === lastContentIdx;
@@ -1221,15 +1211,6 @@ const ContentPartsBody = memo(function ContentPartsBody({
       const awaitsReader = live
         ? keepsThinkingOpen || segment.content.some(blocksLiveFold)
         : hasPendingApproval;
-      if (synthesized && awaitsReader && !hasParallelContent) {
-        const parts: PartWithIndex[] = [];
-        segment.content.forEach((part, position) => {
-          if (part != null) {
-            parts.push({ part, idx: segmentIndices[position] });
-          }
-        });
-        return renderGroups(groupParts(parts), lastContentIdx);
-      }
       if (synthesized && awaitsReader) {
         return renderSegment(
           segment.content,
@@ -1245,17 +1226,6 @@ const ContentPartsBody = memo(function ContentPartsBody({
           hasContent={segment.hasContent}
           attachments={phaseAttachments}
           hasPendingApproval={hasPendingApproval}
-          defaultExpanded={
-            live &&
-            reasoningDisclosures != null &&
-            segment.content.some((part, position) => {
-              if (part?.type !== ContentTypes.THINK) {
-                return false;
-              }
-              const index = getPartKeyIndex(part, segmentIndices[position]);
-              return disclosureStore.get(reasoningDisclosure(reasoningDisclosures, index)) === true;
-            })
-          }
           onExpansionChange={
             live &&
             reasoningDisclosures != null &&
