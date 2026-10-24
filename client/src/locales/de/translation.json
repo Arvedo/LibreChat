@@ -2269,5 +2269,15 @@
   "com_ds_drag_save_suite_desc": "Im Chat verwenden und dauerhaft in der Suite indexieren",
   "com_ds_saving_toast": "Wird in Dokumenten-Suite gespeichert...",
   "com_ds_saved_toast": "In Dokumenten-Suite gespeichert: {{filename}}",
-  "com_ds_save_error_toast": "Fehler beim Speichern in Dokumenten-Suite: {{filename}}"
+  "com_ds_save_error_toast": "Fehler beim Speichern in Dokumenten-Suite: {{filename}}",
+  "com_ui_attribution_powered_by": "Powered by {{anchor}}",
+  "com_ui_attribution_powered_by_partner": "Powered by {{anchor}} und {{partner}}",
+  "com_ui_attribution_powered_by_others": "Powered by {{anchor}} und weiteren",
+  "com_ui_open_source_licenses": "Open-Source-Lizenzen",
+  "com_ui_open_source_licenses_desc": "Lizenzen und Danksagungen für KI-Modelle, Frameworks und Open-Source-Komponenten.",
+  "com_ui_open_source_licenses_view": "Lizenzen anzeigen",
+  "com_ui_open_source_licenses_search": "Komponenten oder Lizenzen filtern...",
+  "com_ui_open_source_licenses_all": "Alle",
+  "com_ui_open_source_licenses_empty": "Keine Lizenzeinträge gefunden.",
+  "com_ui_open_source_licenses_show_text": "Lizenztext"
 }

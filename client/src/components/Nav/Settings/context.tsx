@@ -48,7 +48,9 @@ export function useSettingsContext(): SettingsContextValue {
   const twoFactorPolicyProvider = user != null && isTwoFactorPolicyProvider(user.provider);
   const twoFactorEnabled = user?.twoFactorEnabled === true;
   const allowAccountDeletion = startupConfig?.allowAccountDeletion !== false;
-  const aboutEnabled = startupConfig?.interface?.buildInfo !== false;
+  const aboutEnabled =
+    startupConfig?.interface?.buildInfo !== false ||
+    startupConfig?.interface?.attribution?.enabled === true;
   /* Offered only once the deployment has answered, so an operator's opt-out never flashes the row. */
   const mascotAllowed = startupConfig != null && startupConfig.interface?.mascot !== false;
   /* Offered only once the deployment has answered, matching the capability hook the alerts
