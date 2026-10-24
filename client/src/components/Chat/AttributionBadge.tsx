@@ -87,7 +87,7 @@ export function AttributionBadge({
         data-testid="attribution-badge"
         onClick={() => setModalOpen(true)}
         aria-label={`${label} — ${localize('com_ui_open_source_licenses_view')}`}
-        className="border-border-light bg-surface-primary/80 text-text-secondary hover:bg-surface-secondary hover:text-text-primary absolute inset-e-3 bottom-2 z-20 hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs leading-tight backdrop-blur-xs transition-colors @min-[82rem]:inline-flex"
+        className="border-border-light bg-surface-primary/80 text-text-secondary hover:bg-surface-secondary hover:text-text-primary absolute inset-e-3 bottom-2 z-20 hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs leading-tight backdrop-blur-xs transition-colors sm:inline-flex"
       >
         <Scale className="size-3 shrink-0" aria-hidden="true" />
         <span className="max-w-56 truncate">{label}</span>
