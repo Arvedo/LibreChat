@@ -113,7 +113,10 @@ export function isTwoFactorPolicyProvider(provider: string | null | undefined): 
 /** How long a started social login may take to return to its callback before its `state` expires. */
 export const DEFAULT_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
-export const BASE_ONLY_CONFIG_SECTIONS = ['filters', 'mcpAppSandbox'] as const;
+/** Sections only librechat.yaml sets: no config document, Base included, can change or remove
+ * them. `turnstile` stays here until the server verifies Turnstile tokens: until then a stored
+ * site key adds no protection, and a wrong one locks users out of sign-in and registration. */
+export const BASE_ONLY_CONFIG_SECTIONS = ['filters', 'mcpAppSandbox', 'turnstile'] as const;
 /** Sections that may be stored in the tenant's base config document but must
  * not be overridden or tombstoned by role, group, or user config documents. */
 export const BASE_PRINCIPAL_CONFIG_SECTIONS = ['langfuse'] as const;
@@ -121,13 +124,58 @@ export const BASE_PRINCIPAL_CONFIG_SECTIONS = ['langfuse'] as const;
  * or tenant config document can neither change nor remove them. The pull request provider and
  * host decide where the deployment's token is sent, the OAuth app which credentials users grant
  * and which environment secret is sent with them, and the shared cache's slot count where every
- * replica looks for a shared answer. */
+ * replica looks for a shared answer. The admin catalog's model-list lifetime is one value for the
+ * whole deployment, which `GET /api/admin/config/meta` reports. */
 export const BASE_ONLY_CONFIG_PATHS = [
   'endpoints.agents.pullRequests.provider',
   'endpoints.agents.pullRequests.host',
   'endpoints.agents.pullRequests.oauth',
   'endpoints.agents.pullRequests.sharedCacheSlots',
+  'endpoints.catalogModelsTtlMs',
 ] as const;
+
+/** How long the admin config catalog reuses a scope's model lists unless
+ * `endpoints.catalogModelsTtlMs` sets it: the two minutes a provider's model list is cached for. */
+export const DEFAULT_CATALOG_MODELS_TTL_MS = 120_000;
+
+/**
+ * Why a deployment-only path is set in librechat.yaml only:
+ * - `startup`: read once when the server starts, so a stored value would never apply.
+ * - `operator`: an operator boundary (signed access, rate limits, permission leases, code
+ *   modules, which tools load), read from librechat.yaml itself.
+ * - `unused`: nothing reads it any more.
+ */
+export type DeploymentOnlyConfigReason = 'startup' | 'operator' | 'unused';
+
+/**
+ * Paths of overridable sections that only librechat.yaml sets, as YAML key paths. No config
+ * document, Base included, stores them: admin writes skip them, and the merge keeps
+ * librechat.yaml's value. Unlike `BASE_ONLY_CONFIG_PATHS`, their readers never took a value from
+ * the merged config (apart from the tool filters, which only gated `ask_user_question` there), so
+ * a stored override had no effect rather than a dangerous one.
+ */
+export const DEPLOYMENT_ONLY_CONFIG_PATHS: Readonly<Record<string, DeploymentOnlyConfigReason>> = {
+  rateLimits: 'operator',
+  cloudfront: 'operator',
+  permissions: 'operator',
+  openapi: 'operator',
+  skillDeletion: 'startup',
+  includedTools: 'operator',
+  filteredTools: 'operator',
+  'registration.openidDiscovery': 'startup',
+  'registration.oauthStateTtlMs': 'startup',
+  'endpoints.agents.subagentActivity': 'startup',
+  'endpoints.agents.eventDriven': 'startup',
+  'endpoints.agents.backgroundTasks.shutdownInterruptGraceMs': 'startup',
+  'endpoints.agents.backgroundTasks.completionResultBatchSize': 'startup',
+  'endpoints.agents.backgroundTasks.completionReceiptBatching': 'startup',
+  'endpoints.agents.toolApproval.hooks': 'operator',
+  'mcpSettings.catalogRecovery.maxStateEntries': 'startup',
+  'mcpSettings.catalogRecovery.maxDetachedDiscoveries': 'startup',
+  'mcpSettings.catalogRecovery.authorizationFenceRetryIntervalMs': 'startup',
+  'mcpSettings.catalogRecovery.authorizationFenceRetryBatchSize': 'startup',
+  cache: 'unused',
+};
 
 export const defaultRetrievalModels = [
   'gpt-4o',
@@ -305,36 +353,60 @@ function parseAllowedAddressEntry(entry: string): { address: string; port: strin
   return { address, port };
 }
 
-const allowedAddressEntrySchema = z
-  .string()
-  .refine((entry) => entry.length > 0 && entry.trim().length > 0, {
-    message: 'allowedAddresses entries must be non-empty',
-  })
-  .refine((entry) => !entry.includes('://') && !entry.includes('/') && !/\s/.test(entry), {
-    message:
-      'allowedAddresses entries must be host:port pairs — no URLs, paths, CIDR ranges, or whitespace',
-  })
-  .refine((entry) => parseAllowedAddressEntry(entry) != null, {
-    message:
-      'allowedAddresses entries must include a port, for example localhost:11434 or [::1]:11434',
-  })
-  .refine(
-    (entry) => {
-      const parsed = parseAllowedAddressEntry(entry);
-      if (!parsed) return false;
-      const stripped = parsed.address;
-      const isIPv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(stripped);
-      const isIPv6 = !isIPv4 && stripped.includes(':');
-      if (!isIPv4 && !isIPv6) {
-        return true; // hostname — checked at runtime via DNS
-      }
-      return isIPv4 ? isPrivateIPv4Literal(stripped) : isPrivateIPv6Literal(stripped);
-    },
-    {
-      message:
-        'allowedAddresses is scoped to private IP space — public IP literals are not permitted (use hostname:port if it resolves to a private IP)',
-    },
-  );
+/**
+ * Why an `allowedAddresses` entry is refused, as the `reason` param of its validation issue:
+ * - `empty`: the entry is empty or only whitespace.
+ * - `format`: a URL, path, CIDR range or whitespace instead of a `host:port` pair.
+ * - `missing_port`: no valid port (`localhost`, `10.0.0.5`).
+ * - `public_ip`: an IP literal outside private, loopback and link-local space.
+ */
+export type AllowedAddressIssue = 'empty' | 'format' | 'missing_port' | 'public_ip';
+
+const ALLOWED_ADDRESS_ISSUE_MESSAGES: Readonly<Record<AllowedAddressIssue, string>> = {
+  empty: 'allowedAddresses entries must be non-empty',
+  format:
+    'allowedAddresses entries must be host:port pairs — no URLs, paths, CIDR ranges, or whitespace',
+  missing_port:
+    'allowedAddresses entries must include a port, for example localhost:11434 or [::1]:11434',
+  public_ip:
+    'allowedAddresses is scoped to private IP space — public IP literals are not permitted (use hostname:port if it resolves to a private IP)',
+};
+
+/**
+ * The first rule an `allowedAddresses` entry fails, checked in the order above, or `null` for an
+ * entry the schema accepts. A hostname passes: its resolved IP is checked at runtime.
+ */
+export function getAllowedAddressEntryIssue(entry: string): AllowedAddressIssue | null {
+  if (entry.trim().length === 0) {
+    return 'empty';
+  }
+  if (entry.includes('://') || entry.includes('/') || /\s/.test(entry)) {
+    return 'format';
+  }
+  const parsed = parseAllowedAddressEntry(entry);
+  if (!parsed) {
+    return 'missing_port';
+  }
+  const { address } = parsed;
+  const isIPv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(address);
+  if (!isIPv4 && !address.includes(':')) {
+    return null;
+  }
+  const isPrivate = isIPv4 ? isPrivateIPv4Literal(address) : isPrivateIPv6Literal(address);
+  return isPrivate ? null : 'public_ip';
+}
+
+/** One issue per refused entry, with its message and `params.reason`. */
+const allowedAddressEntrySchema = z.string().superRefine((entry, ctx) => {
+  const reason = getAllowedAddressEntryIssue(entry);
+  if (reason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: ALLOWED_ADDRESS_ISSUE_MESSAGES[reason],
+      params: { reason },
+    });
+  }
+});
 
 export const allowedAddressesSchema = z.array(allowedAddressEntrySchema).optional();
 
@@ -710,6 +782,13 @@ export const azureGroupSchema = z
     models: z.record(z.string(), modelConfigSchema),
   })
   .required()
+  .extend({
+    /**
+     * Masked preview of the group's `apiKey`, set by the admin config API when it stores the key
+     * encrypted. Read-only: writes to it are rejected.
+     */
+    apiKeyPreview: z.string().optional(),
+  })
   .and(azureBaseSchema);
 
 export const azureGroupConfigsSchema = z.array(azureGroupSchema).min(1);
@@ -1542,6 +1621,14 @@ export type HostFileEditLimits = z.infer<typeof hostFileEditLimitsSchema>;
 
 /** Server-side resource and recovery policy for ephemeral child activity. */
 export const subagentActivityConfigSchema = z.object({
+  contentRecoveryEnabled: z.boolean().default(false),
+  /** Batch public content writes independently of the lossy live activity projection. */
+  contentPageBytes: z.number().int().min(1024).max(4_194_304).default(262_144),
+  contentFlushMs: z.number().int().min(10).max(10_000).default(250),
+  contentSettlementTimeoutMs: z.number().int().min(100).max(60_000).default(1000),
+  contentRecoveryGraceMs: z.number().int().min(0).max(300_000).default(30_000),
+  contentBatchBytes: z.number().int().min(1024).max(4_194_304).default(65_536),
+  contentPendingBytes: z.number().int().min(65_536).max(1_073_741_824).default(8_388_608),
   replayTtlMs: z.number().int().min(1_000).max(86_400_000).default(300_000),
   publicationTimeoutMs: z.number().int().min(100).max(60_000).default(1_000),
   retryAttempts: z.number().int().min(1).max(10).default(3),
@@ -1591,12 +1678,22 @@ export const agentsEndpointSchema = baseEndpointSchema
           message: 'Use 0 to disable, or at least 1000 ms',
         })
         .default(DEFAULT_STREAM_KEEPALIVE_INTERVAL_MS),
-      recursionLimit: z.number().optional(),
+      /** Graph steps an agent run may take; a run with fewer than 1 cannot take a step. */
+      recursionLimit: z.number().int().min(1).optional(),
       disableBuilder: z.boolean().optional().default(false),
       /** Optional workspace guidance acquisition budget, separate from command execution. */
       repositoryInstructions: z
         .object({
           timeoutMs: z.number().int().min(100).max(30_000).optional().default(2000),
+        })
+        .optional(),
+      /** How long a turn on an attached workspace may spend copying chat attachments into it
+       * before the model runs; unfinished copies fall back to a note and retry next turn. */
+      workspaceAttachments: z
+        .object({
+          timeoutMs: z.number().int().min(1_000).max(120_000).optional().default(10_000),
+          /** Workspace requests in flight for the turn, across every agent it primes. */
+          concurrency: z.number().int().min(1).max(16).optional().default(3),
         })
         .optional(),
       /** Budget and cache configuration for resolving an agent's linked prompt-group
@@ -1622,7 +1719,8 @@ export const agentsEndpointSchema = baseEndpointSchema
             .default({}),
         })
         .optional(),
-      maxRecursionLimit: z.number().optional(),
+      /** Cap on any agent's `recursion_limit` and on `recursionLimit`. */
+      maxRecursionLimit: z.number().int().min(1).optional(),
       /** Max cumulative bytes a single streamed tool call's arguments may reach before the run
        * aborts. Defaults to 64 KiB in the agents SDK; `0` disables the guard. */
       maxToolCallArgBytes: z.number().optional(),
@@ -1723,6 +1821,39 @@ export const agentsEndpointSchema = baseEndpointSchema
               enabled: z.boolean().optional(),
               /** Defaults to five. Zero disables enrollment; existing machines remain usable. */
               maxPerUser: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+              browserSetup: z
+                .object({
+                  enabled: z.boolean().optional().default(false),
+                  /** Canonical public instance URL, including the deployment prefix. */
+                  instance: z.string().url(),
+                  maxPending: z.number().int().min(1).max(512).optional().default(128),
+                  maxPerIp: z.number().int().min(1).max(512).optional().default(5),
+                  requestsPerMinute: z.number().int().min(1).max(20000).optional().default(1200),
+                  requestsPerIpMinute: z.number().int().min(1).max(2000).optional().default(120),
+                  proofWindowMs: z.number().int().min(10000).max(120000).optional().default(60000),
+                  maxProofsPerAttempt: z
+                    .number()
+                    .int()
+                    .min(320)
+                    .max(10000)
+                    .optional()
+                    .default(1024),
+                  reconcileIntervalMs: z
+                    .number()
+                    .int()
+                    .min(1000)
+                    .max(60000)
+                    .optional()
+                    .default(10000),
+                  retentionMs: z
+                    .number()
+                    .int()
+                    .min(600000)
+                    .max(604800000)
+                    .optional()
+                    .default(86400000),
+                })
+                .optional(),
             })
             .optional(),
           /** Server-only policy letting a conversation's owner move its sealed attached decision
@@ -2593,8 +2724,42 @@ export enum EImageOutputType {
   JPEG = 'jpeg',
 }
 
+/** Schemes a configured link may use: web pages, and the mail and phone links that run no script. */
+const LINK_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
+/**
+ * A link's scheme as a reader finds it. It skips what either reader strips from the front: the
+ * WHATWG URL parser strips C0 controls and spaces, and `String.prototype.trim()` (which clients
+ * apply first) strips Unicode white space such as U+00A0, U+FEFF, U+2028 and U+3000; skipping
+ * both at once covers either reader, and either order. Inside the scheme it allows the tabs and
+ * newlines the URL parser removes. Only the front of a link decides its scheme, so the match is
+ * anchored there and ends with the scheme: the skipped characters cannot start a scheme, so a
+ * failed match gives each one back once, and nothing after the scheme is read at all.
+ */
+// eslint-disable-next-line no-control-regex
+const URL_SCHEME = /^[\u0000-\u0020\s]*([a-z][a-z\d+.\t\n\r-]*):/i;
+const URL_TAB_OR_NEWLINE = /[\t\n\r]/g;
+
+/**
+ * Whether a configured link, such as a privacy policy or terms of service `externalUrl`, may be
+ * rendered as an `href` on the app's pages, the signed-out sign-in page included: an http(s),
+ * `mailto:` or `tel:` URL, a URL relative to the app (which keeps the page's http(s) scheme),
+ * or a blank value, which publishes no link. The scheme is read the way the URL parser browsers
+ * use reads it, after the trimming clients apply, so letter case, white space (Unicode white
+ * space included) and control characters cannot disguise one that runs script, such as
+ * `javascript:` or `data:`. Only the scheme is judged: a malformed http(s) URL is not opened by
+ * a browser at all, so it stays accepted as it always was.
+ */
+export function isSafeLinkUrl(url: string): boolean {
+  const scheme = URL_SCHEME.exec(url)?.[1];
+  return scheme == null || LINK_SCHEMES.has(scheme.replace(URL_TAB_OR_NEWLINE, '').toLowerCase());
+}
+
+const linkUrlSchema = z
+  .string()
+  .refine(isSafeLinkUrl, { message: 'must be an http(s), mailto: or tel: URL, or a relative URL' });
+
 const termsOfServiceSchema = z.object({
-  externalUrl: z.string().optional(),
+  externalUrl: linkUrlSchema.optional(),
   openNewTab: z.boolean().optional(),
   modalAcceptance: z.boolean().optional(),
   modalTitle: z.string().optional(),
@@ -2836,7 +3001,7 @@ export const interfaceSchema = z
     theme: deploymentThemeSchema.optional(),
     privacyPolicy: z
       .object({
-        externalUrl: z.string().optional(),
+        externalUrl: linkUrlSchema.optional(),
         openNewTab: z.boolean().optional(),
       })
       .optional(),
@@ -4385,6 +4550,13 @@ export const configSchema = z.object({
     .object({
       allowedAddresses: allowedAddressesSchema,
       /**
+       * Milliseconds the admin config catalog (`GET /api/admin/config/catalog`) reuses a scope's
+       * model lists while its endpoint config is unchanged, up to one hour; `0` resolves them on
+       * every read, where a fetched list may still come from the two-minute model-list cache.
+       * Only librechat.yaml sets it. Omission keeps `DEFAULT_CATALOG_MODELS_TTL_MS` (two minutes).
+       */
+      catalogModelsTtlMs: z.number().int().min(0).max(3_600_000).optional(),
+      /**
        * Defaults applied to every endpoint. Omit-based, so options added to
        * `baseEndpointSchema` are inherited here automatically — no list to
        * maintain (contrast `azureEndpointSchema`, which enumerates via
@@ -5268,6 +5440,10 @@ export enum Constants {
   ENCODED_DOMAIN_LENGTH = 10,
   /** Identifier for using current_model in multi-model requests. */
   CURRENT_MODEL = 'current_model',
+  /** Protocol bound for UUIDs, nanoids, and derived user identities. */
+  MAX_MESSAGE_ID_LENGTH = 256,
+  /** A preliminary response reserves one trailing underscore. */
+  MAX_RESPONSE_MESSAGE_ID_LENGTH = MAX_MESSAGE_ID_LENGTH + 1,
   /** Common divider for text values */
   COMMON_DIVIDER = '__',
   /** Max length for commands */

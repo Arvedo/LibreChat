@@ -12,6 +12,7 @@ import type {
   TLangfuseConnectionTestRequest,
   TLangfuseConnectionTestResponse,
   TLangfuseSessionLinkResponse,
+  TLangfuseUnavailableResponse,
 } from 'librechat-data-provider';
 import type { ConfigRecord, MessageMethods } from '@librechat/data-schemas';
 import type { Response } from 'express';
@@ -24,14 +25,13 @@ import {
 } from '~/langfuse/tenantDestinations';
 import { redirectPolicyFor, resolveLangfuseHeaders } from '~/langfuse/utils';
 import { decryptConfigSecret, encryptConfigSecretFields } from './secrets';
+import { getLangfuseConnectionAvailability } from '~/langfuse/policy';
 import { scopeHeadersToDestination } from '~/langfuse/destinations';
-import { isLangfuseConnectionAvailable } from '~/langfuse/policy';
 import { resolveLangfuseSession } from '~/langfuse/session';
 import { getSafeErrorMetadata } from '~/utils/errors';
 import { createAdminAuditEmitter } from './audit';
 import { mergeHeaders } from '~/utils/headers';
 
-const DEFAULT_PRIORITY = 10;
 const ENCRYPTED_PREFIX = 'v3:';
 const LANGFUSE_VERIFICATION_TIMEOUT_MS = 10_000;
 
@@ -61,13 +61,16 @@ export interface AdminLangfuseDeps {
     principalId: string,
     options?: { includeInactive?: boolean },
   ) => Promise<ConfigRecord | null>;
-  /** Sets the fields in one compare-and-swap write, re-reading on a concurrent change. */
+  /**
+   * Sets the fields in one compare-and-swap write, re-reading on a concurrent change. An
+   * omitted priority keeps the stored one (Base merges first whatever its priority).
+   */
   patchConfigFields: (
     principalType: PrincipalType,
     principalId: string,
     principalModel: PrincipalModel,
     fields: Record<string, unknown>,
-    priority: number,
+    priority?: number,
   ) => Promise<ConfigRecord | null>;
   toggleConfigActive: (
     principalType: PrincipalType,
@@ -135,12 +138,22 @@ function getConnectionChanges(
   return change ? [change, ...additionalChanges] : ['updated'];
 }
 
+/**
+ * 404 on a deployment that offers no Langfuse connection, with the reason (`tracing_disabled`,
+ * `env_credentials`, `fanout_disabled`, `tenant_export_disabled`): every route here is behind the
+ * Langfuse capability, so only its holders learn why.
+ */
 function rejectWhenConnectionUnavailable(res: Response): Response | undefined {
-  if (isLangfuseConnectionAvailable()) {
+  const availability = getLangfuseConnectionAvailability();
+  if (availability.available) {
     return undefined;
   }
-
-  return res.status(404).json({ error: 'Langfuse connection settings are not available' });
+  const body: TLangfuseUnavailableResponse = {
+    error: 'Langfuse connection settings are not available',
+    code: 'LANGFUSE_UNAVAILABLE',
+    reason: availability.reason,
+  };
+  return res.status(404).json(body);
 }
 
 type LangfuseVerificationFailure = {
@@ -455,7 +468,6 @@ export function createAdminLangfuseHandlers(deps: AdminLangfuseDeps): {
         BASE_CONFIG_PRINCIPAL_ID,
         PrincipalModel.ROLE,
         encryptConfigSecretFields(fields),
-        existing?.priority ?? DEFAULT_PRIORITY,
       );
       /** The patch has committed by now, so a failed activation must not skip the cache
        * invalidation or the audit entry; it is rethrown once both have started. */

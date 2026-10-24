@@ -51,8 +51,8 @@ function writeYaml(maxMatches) {
   fs.writeFileSync(configPath, yaml.dump({ version: Constants.CONFIG_VERSION, filters }));
 }
 
-const principal = '/api/admin/config/user/reload-sentinel';
-
+/** A real user's profile route: a write that creates a profile needs its principal to exist. */
+let principal;
 let app;
 let mongoServer;
 
@@ -63,6 +63,11 @@ beforeAll(async () => {
   mongoose.set('autoIndex', false);
   createModels(mongoose);
   await mongoose.models.Config.createIndexes();
+  const user = await mongoose.models.User.create({
+    email: 'reload-sentinel@example.com',
+    provider: 'local',
+  });
+  principal = `/api/admin/config/user/${user._id}`;
   writeYaml(1);
   app = express();
   app.use(express.json());
@@ -92,6 +97,8 @@ async function served() {
 }
 
 describe('admin config writes and librechat.yaml', () => {
+  const batch = { ops: [{ op: 'set', fieldPath: 'interface.customWelcome', value: 'batch' }] };
+
   /** Ordered: each write acts on the document the previous one left. */
   const writes = [
     ['PUT a document', 201, (agent) => agent.put(principal).send({ overrides: {}, priority: 10 })],
@@ -114,6 +121,7 @@ describe('admin config writes and librechat.yaml', () => {
       (agent) =>
         agent.delete(`${principal}/fields`).query({ fieldPath: 'interface.customWelcome' }),
     ],
+    ['POST a change batch', 200, (agent) => agent.post(`${principal}/changes`).send(batch)],
     [
       'deactivate the document',
       200,
@@ -153,5 +161,19 @@ describe('admin config writes and librechat.yaml', () => {
 
     expect(write.status).toBe(201);
     expect(await served()).toEqual([committed + 1, committed + 1]);
+  });
+
+  it('does not reload for a change batch that leaves the document as it is', async () => {
+    const committed = writes.length + 2;
+    const first = await request(app).post(`${principal}/changes`).send(batch);
+    expect(first.body.written).toBe(true);
+    expect(await served()).toEqual([committed, committed]);
+    writeYaml(committed + 1);
+
+    const repeat = await request(app).post(`${principal}/changes`).send(batch);
+
+    expect(repeat.status).toBe(200);
+    expect(repeat.body.written).toBe(false);
+    expect(await served()).toEqual([committed, committed]);
   });
 });

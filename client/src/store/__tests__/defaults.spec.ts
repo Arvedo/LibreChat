@@ -24,7 +24,7 @@ describe('preference defaults with nothing persisted', () => {
     localStorage.clear();
   });
 
-  it('adds a newline on Enter instead of sending', () => {
+  it('sends on Enter', () => {
     expect(readRecoil(settings.enterToSend)).toBe(true);
   });
 
@@ -47,10 +47,10 @@ describe('persisted preferences', () => {
     localStorage.clear();
   });
 
-  it('keeps a saved Enter to send', () => {
-    localStorage.setItem('enterToSend', JSON.stringify(true));
+  it('keeps a saved opt-out of Enter to send', () => {
+    localStorage.setItem('enterToSend', JSON.stringify(false));
 
-    expect(readRecoil(settings.enterToSend)).toBe(true);
+    expect(readRecoil(settings.enterToSend)).toBe(false);
   });
 
   it('keeps a saved opt-out of collapsing', () => {
