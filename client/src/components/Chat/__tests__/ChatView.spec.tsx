@@ -72,6 +72,7 @@ jest.mock('../Input/ChatForm', () => ({
   },
 }));
 jest.mock('../Input/ConversationStarters', () => ({ __esModule: true, default: () => <div /> }));
+jest.mock('../AttributionBadge', () => ({ __esModule: true, default: () => null }));
 
 describe('ChatView page heading', () => {
   beforeEach(() => {

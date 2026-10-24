@@ -35,6 +35,7 @@ import { OwnerTextProvider } from './Messages/PrivateText';
 import { useGetMessagesByConvoId } from '~/data-provider';
 import { AskAnswerHostProvider } from './ask/state';
 import MessagesView from './Messages/MessagesView';
+import AttributionBadge from './AttributionBadge';
 import Presentation from './Presentation';
 import ChatForm from './Input/ChatForm';
 import { TraceSurface } from './Trace';
@@ -73,6 +74,7 @@ function ChatView({
   const autoSendText = useRecoilValue(store.autoSendText);
   const speechSettingsInitialized = useRecoilValue(store.speechSettingsInitialized);
   const centerFormOnLanding = useRecoilValue(store.centerFormOnLanding);
+  const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
   const pendingAction = useAtomValue(
     pendingApprovalActionFamily(conversationId ?? Constants.NEW_CONVO),
   );
@@ -288,6 +290,7 @@ function ChatView({
                           />
                         </div>
                         {fullFooter && <Footer />}
+                        <AttributionBadge maximizeChatSpace={maximizeChatSpace} />
                       </>
                     </TraceSurface>
                   </Presentation>

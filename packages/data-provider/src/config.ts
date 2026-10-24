@@ -2996,6 +2996,34 @@ export const isAllDataRetention = (mode?: RetentionMode | null): boolean =>
 export const isForcedTemporaryRetention = (mode?: RetentionMode | null): boolean =>
   mode === RetentionMode.EPHEMERAL;
 
+/**
+ * Configuration for the optional model & open-source attribution badge
+ * in the chat view and the open-source license catalog modal.
+ */
+export const attributionSchema = z.object({
+  /** Whether the attribution badge and Settings -> About license section are enabled. */
+  enabled: z.boolean().optional().default(false),
+  /** Primary model or project name anchored in the badge (e.g., "Powered by <anchor>"). */
+  anchor: z.string().trim().min(1).max(80).optional(),
+  /** Partner projects/libraries rotated with the anchor ("Powered by <anchor> and <partner>"). */
+  partners: z.array(z.string().trim().min(1).max(80)).max(32).optional().default([]),
+  /** Whether to include the "Powered by <anchor> and others" variant in rotation. */
+  includeOthers: z.boolean().optional().default(true),
+  /** Whether to include the standalone "Powered by <anchor>" variant in rotation. */
+  includeStandalone: z.boolean().optional().default(true),
+  /** Root-relative path or http(s) URL serving the JSON license catalog (default: `/licenses.json`). */
+  licensesUrl: z
+    .string()
+    .trim()
+    .refine((v) => (v.startsWith('/') && !v.startsWith('//')) || /^https?:\/\//i.test(v), {
+      message: 'licensesUrl must be a root-relative path or http(s) URL',
+    })
+    .optional()
+    .default('/licenses.json'),
+});
+
+export type TAttributionConfig = z.infer<typeof attributionSchema>;
+
 export const interfaceSchema = z
   .object({
     theme: deploymentThemeSchema.optional(),
@@ -3102,6 +3130,8 @@ export const interfaceSchema = z
     fileSearch: z.boolean().optional(),
     fileCitations: z.boolean().optional(),
     traceViewer: traceViewerSchema.optional(),
+    /** Optional model and open-source attribution pill and license catalog modal (`docs/attribution.md`). */
+    attribution: attributionSchema.optional(),
     /** Tool keys (and `'mcp'` or an MCP server name) pinned to the prompt bar by default */
     defaultPinnedTools: z.array(z.string()).optional(),
     buildInfo: z.boolean().optional(),
