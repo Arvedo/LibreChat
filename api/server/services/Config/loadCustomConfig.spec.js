@@ -754,6 +754,45 @@ describe('loadCustomConfig', () => {
       expect(rawConfig.modelSpecs.list[0].description).toBe('Updated Description');
       expect(rawConfig.modelSpecs.list[0].default).toBe(true);
     });
+
+    it('inherits subagents config onto tier model spec when configured on baseline spec', () => {
+      fs.writeFileSync(
+        path.join(tempExtDir, 'registry.json'),
+        JSON.stringify({
+          model_name: 'TierSub',
+          model_label: 'Tier Sub',
+          main_agent_id: 'agent_TierSub01',
+          active_extensions: [],
+        }),
+      );
+
+      const rawConfig = {
+        endpoints: {
+          custom: [
+            {
+              name: 'Local-Endpoint',
+              allowFunctionCalling: true,
+              models: { default: ['baseline-model'] },
+              tokenConfig: {},
+            },
+          ],
+        },
+        modelSpecs: {
+          list: [
+            {
+              name: 'baseline-model',
+              label: 'Baseline Model',
+              default: true,
+              subagents: { enabled: true, allowSelf: true },
+              preset: { endpoint: 'agents', agent_id: 'agent_Baseline01', model: 'baseline-model' },
+            },
+          ],
+        },
+      };
+
+      loadCustomConfig.applyExtensionManifests(rawConfig);
+
+      expect(rawConfig.modelSpecs.list[0].subagents).toEqual({ enabled: true, allowSelf: true });
     });
   });
 });

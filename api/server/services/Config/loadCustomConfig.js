@@ -155,6 +155,9 @@ function applyExtensionManifests(rawConfig) {
             spec.description = reg.main_agent_description;
           }
           spec.default = true;
+          if (cfg.modelSpecs.list[0]?.subagents && !spec.subagents) {
+            spec.subagents = { ...cfg.modelSpecs.list[0].subagents };
+          }
           spec.preset = {
             ...(spec.preset || {}),
             ...(mainAgentId ? { agent_id: mainAgentId } : {}),
@@ -169,12 +172,14 @@ function applyExtensionManifests(rawConfig) {
           for (const spec of cfg.modelSpecs.list) {
             spec.default = false;
           }
-          const basePreset = cfg.modelSpecs.list[0]?.preset || {};
+          const baseSpec = cfg.modelSpecs.list[0] || {};
+          const basePreset = baseSpec.preset || {};
           const tierSpec = {
             name: modelName.toLowerCase(),
             label: modelLabel,
             ...(reg.main_agent_description ? { description: reg.main_agent_description } : {}),
             default: true,
+            ...(baseSpec.subagents ? { subagents: { ...baseSpec.subagents } } : {}),
             preset: {
               ...basePreset,
               ...(mainAgentId ? { agent_id: mainAgentId } : {}),
