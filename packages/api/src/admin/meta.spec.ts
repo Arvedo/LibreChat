@@ -15,10 +15,13 @@ import {
   BASE_CONFIG_PRINCIPAL_ID,
   isConfigOverrideStateEmpty,
   ConfigRevisionConflictError,
+  MAX_CONFIG_ENTRY_KEY_LENGTH,
+  formatKeyedPath,
 } from '@librechat/data-schemas';
 import {
   Constants,
   PrincipalType,
+  AgentCapabilities,
   PrincipalModel,
   configSchema,
   RerankerTypes,
@@ -27,6 +30,7 @@ import {
   ScraperProviders,
   PERMISSION_SUB_KEYS,
   BASE_ONLY_CONFIG_PATHS,
+  DERIVED_CONFIG_PATHS,
   BASE_ONLY_CONFIG_SECTIONS,
   PROCESS_MCP_SERVER_FIELDS,
   DEPLOYMENT_ONLY_CONFIG_PATHS,
@@ -36,6 +40,7 @@ import {
   RUNTIME_CONFIG_INTERFACE_FIELDS,
 } from 'librechat-data-provider';
 import type {
+  AdminConfigChangesResponse,
   AdminConfigFeatureFlag,
   AdminResolvedConfigResponse,
   AdminConfigCatalogResponse,
@@ -73,6 +78,7 @@ import { resolveTitleConfig } from '~/endpoints/config';
 import { createAppConfigService } from '~/app/service';
 import { mergeOverrideLayers } from '~/app/overrides';
 import { createAdminConfigHandlers } from './config';
+import { expandCustomEndpoint } from '~/app/params';
 import { createAdminRolesHandlers } from './roles';
 import { ConfigReloadError } from '~/app/loader';
 import { ADMIN_CONFIG_FEATURES } from './meta';
@@ -85,6 +91,7 @@ jest.mock('@librechat/data-schemas', () => {
 });
 
 type Doc = Record<string, unknown>;
+type AppServiceConfig = NonNullable<Parameters<typeof AppService>[0]>['config'];
 type ResponseBody = { config?: { overrides: Doc; revision?: string }; [key: string]: unknown };
 type MockRes = Response & { statusCode: number; body: ResponseBody | undefined };
 type MockReqInit = Omit<Partial<ServerRequest>, 'body'> & { body?: object };
@@ -138,10 +145,41 @@ function createHandlers(overrides: Partial<AdminConfigDeps> = {}) {
   });
 }
 
-async function getMeta(): Promise<{ status: number; meta: AdminConfigMeta }> {
+async function getMeta(
+  deps: Partial<AdminConfigDeps> = {},
+): Promise<{ status: number; meta: AdminConfigMeta }> {
   const res = mockRes();
-  await createHandlers().getConfigMeta(mockReq(), res);
+  await createHandlers(deps).getConfigMeta(mockReq(), res);
   return { status: res.statusCode, meta: res.body as AdminConfigMeta };
+}
+
+/** A server with every switch a deployment can turn on, on: what `ADMIN_CONFIG_FEATURES` lists. */
+const SWITCHES_ON: Partial<AdminConfigDeps> = { rederiveEndpoints: true };
+
+/** An app config service over `config` (librechat.yaml) and stored `layers`, as the server builds it. */
+function serviceOver(
+  config: Doc,
+  layers: ConfigRecord[],
+  options: { rederiveEndpoints?: boolean } = {},
+) {
+  const entries = new Map<string, unknown>();
+  return createAppConfigService({
+    loadBaseConfig: () =>
+      AppService({
+        config: structuredClone(config) as AppServiceConfig,
+        expandCustomEndpoint,
+      }),
+    setCachedTools: async () => undefined,
+    getCache: () => ({
+      get: async (key: string) => entries.get(key),
+      set: async (key: string, value: unknown) => entries.set(key, value),
+      delete: async (key: string) => entries.delete(key),
+    }),
+    cacheKeys: { APP_CONFIG: 'app_config' },
+    getApplicableConfigs: jest.fn().mockResolvedValue(layers),
+    getUserPrincipals: async () => [],
+    ...options,
+  });
 }
 
 async function write(
@@ -304,15 +342,19 @@ describe('GET /api/admin/config/meta', () => {
     expect(Object.keys(meta.features).sort()).toEqual([
       'adminTermsExempt',
       'awaitedInvalidation',
+      'azureGroupMergeKey',
       'azureGroupSecrets',
       'catalogApi',
       'changesBatch',
+      'customParamsExpansion',
       'deterministicPrecedence',
       'dottedKeys',
+      'endpointRederive',
       'envAllowlist',
       'envStatus',
       'expectedRevision',
       'issueParams',
+      'keyedTombstones',
       'preAuthBaseOverrides',
       'principalCheck',
       'priorityRoute',
@@ -320,10 +362,12 @@ describe('GET /api/admin/config/meta', () => {
       'readFilteredWriteResponses',
       'recordSecrets',
       'reloadRoute',
+      'renameHints',
       'resolvedApi',
       'roleRenameMovesProfile',
       'secretRebinding',
       'sectionAllowlist',
+      'specInterfaceRederive',
       'webSearchStoredKeys',
       'writeReport',
       'yamlMcpHide',
@@ -332,6 +376,7 @@ describe('GET /api/admin/config/meta', () => {
     expect(meta.limits).toEqual({
       maxPatchEntries: 100,
       maxChangeOps: 1000,
+      maxEntryKeyLength: 256,
       overrideCacheTtlMs: 60_000,
       catalogModelsTtlMs: 120_000,
     });
@@ -344,18 +389,23 @@ describe('GET /api/admin/config/meta', () => {
       'baseOnlySections',
       'basePrincipalSections',
       'deploymentOnlyPaths',
+      'derivedPaths',
       'interface',
       'overrideKeyMap',
       'processMcpFields',
       'recordSecretFields',
       'refusedMaps',
+      'renameHintPaths',
       'secretFields',
       'titleResolution',
     ]);
   });
 
-  it('reports every admin config behaviour this server ships as on', async () => {
-    const { meta } = await getMeta();
+  it('reports every admin config behaviour this server ships as on, switches as the deployment sets them', async () => {
+    const off = await getMeta();
+    const on = await getMeta(SWITCHES_ON);
+    expect(off.meta.features).toEqual({ ...on.meta.features, endpointRederive: false });
+    const { meta } = on;
     expect(meta.features).toEqual({
       dottedKeys: true,
       sectionAllowlist: true,
@@ -383,6 +433,12 @@ describe('GET /api/admin/config/meta', () => {
       writeReport: true,
       issueParams: true,
       adminTermsExempt: true,
+      keyedTombstones: true,
+      renameHints: true,
+      azureGroupMergeKey: true,
+      customParamsExpansion: true,
+      specInterfaceRederive: true,
+      endpointRederive: true,
     });
   });
 
@@ -414,10 +470,13 @@ describe('meta rules equal the rules the server applies', () => {
 
   it('lists the sections and paths of the live constants', () => {
     expect(meta.rules.acceptedSections).toEqual(Object.keys(configSchema.shape));
+    expect(meta.rules.renameHintPaths).toEqual(['mcpServers', 'endpoints.custom']);
+    expect(meta.limits.maxEntryKeyLength).toBe(MAX_CONFIG_ENTRY_KEY_LENGTH);
     expect(meta.rules.baseOnlySections).toEqual([...BASE_ONLY_CONFIG_SECTIONS]);
     expect(meta.rules.basePrincipalSections).toEqual([...BASE_PRINCIPAL_CONFIG_SECTIONS]);
     expect(meta.rules.baseOnlyPaths).toEqual([...BASE_ONLY_CONFIG_PATHS]);
     expect(meta.rules.deploymentOnlyPaths).toEqual({ ...DEPLOYMENT_ONLY_CONFIG_PATHS });
+    expect(meta.rules.derivedPaths).toEqual([...DERIVED_CONFIG_PATHS]);
     expect(meta.rules.processMcpFields).toEqual([...PROCESS_MCP_SERVER_FIELDS]);
     expect(meta.rules.interface).toEqual({
       permissionFields: [...INTERFACE_PERMISSION_FIELDS],
@@ -1376,12 +1435,15 @@ const FEATURE_PROBES: Record<AdminConfigFeatureFlag, () => Promise<boolean>> = {
       'endpoints.azureOpenAI.groups': [group('azure-admin-secret-key')],
     })['endpoints.azureOpenAI.groups'] as Doc[];
     const encrypted = String(stored.apiKey).startsWith('v3:');
-    /** The Azure client is built with the key a profile's group holds, decrypted. */
+    /**
+     * The Azure client is built with the key a profile's group holds, decrypted, where the merge
+     * resolves a profile's groups (`endpointRederive`).
+     */
     const runtime = resolveRuntimeConfigSecrets(
       mergeOverrideLayers(
         { config: {} } as AppConfig,
         [storedConfig({ endpoints: { azureOpenAI: { groups: [stored] } } })],
-        { envPolicy: createEnvReferencePolicy({ config: {} }) },
+        { envPolicy: createEnvReferencePolicy({ config: {} }), rederiveEndpoints: true },
       ),
     );
     const azure = runtime.endpoints?.azureOpenAI;
@@ -1502,20 +1564,27 @@ const FEATURE_PROBES: Record<AdminConfigFeatureFlag, () => Promise<boolean>> = {
       [storedConfig({ ocr: { apiKey: '${UNLISTED_NAME}' } })],
       { envPolicy: createEnvReferencePolicy({ config: {} }) },
     );
-    const refused = (res: MockRes) =>
+    /** Reads return Vertex AI's derived settings resolved: only librechat.yaml's Vertex names. */
+    const vertexYaml = { endpoints: { anthropic: { vertex: { projectId: '${GCP_PROJECT}' } } } };
+    const vertexWrite = (value: string) =>
+      patch([{ fieldPath: 'endpoints.anthropic.vertex.projectId', value }], {
+        getAppConfig: jest.fn().mockResolvedValue({ config: vertexYaml }),
+      });
+    const vertexCredential = await vertexWrite('${OPENAI_API_KEY}');
+    process.env.GCP_PROJECT = 'yaml-gcp-project';
+    const vertexYamlNamed = await vertexWrite('${GCP_PROJECT}').finally(() => {
+      delete process.env.GCP_PROJECT;
+    });
+    const refused = (res: MockRes, segments: string[]) =>
       res.statusCode === 400 &&
       JSON.stringify(res.body?.issues) ===
-        JSON.stringify([
-          {
-            path: res === unlisted ? 'ocr.baseURL' : 'ocr.apiKey',
-            segments: ['ocr', res === unlisted ? 'baseURL' : 'apiKey'],
-            code: 'env_reference_not_allowed',
-          },
-        ]);
+        JSON.stringify([{ path: segments.join('.'), segments, code: 'env_reference_not_allowed' }]);
     return (
-      refused(unlisted) &&
-      refused(batch) &&
+      refused(unlisted, ['ocr', 'baseURL']) &&
+      refused(batch, ['ocr', 'apiKey']) &&
+      refused(vertexCredential, ['endpoints', 'anthropic', 'vertex', 'projectId']) &&
       yamlNamed.statusCode === 200 &&
+      vertexYamlNamed.statusCode === 200 &&
       merged.ocr?.apiKey === ''
     );
   },
@@ -1568,6 +1637,309 @@ const FEATURE_PROBES: Record<AdminConfigFeatureFlag, () => Promise<boolean>> = {
       getIn(restatedMerge, 'mcpConfig.tools.apiKey.key') === '${TOOLS_KEY}' &&
       restated.statusCode === 200 &&
       restated.body?.ignored === undefined
+    );
+  },
+  async azureGroupMergeKey() {
+    const east = {
+      group: 'east',
+      apiKey: 'east-key-literal',
+      instanceName: 'east',
+      version: '2024-10-21',
+      deploymentName: 'gpt-4o',
+      models: { 'gpt-4o': true },
+    };
+    const yaml = { endpoints: { azureOpenAI: { groups: [east] } } };
+    const base = await AppService({ config: structuredClone(yaml) as AppServiceConfig });
+    const getAppConfig = jest.fn().mockResolvedValue(base);
+    const mini = { group: 'east', models: { 'gpt-4o-mini': { deploymentName: 'mini' } } };
+    const merged = mergeOverrideLayers(
+      base,
+      [storedConfig({ endpoints: { azureOpenAI: { groups: [mini] } } })],
+      { envPolicy: createEnvReferencePolicy({ config: yaml }), rederiveEndpoints: true },
+    );
+    const indexed = await patch(
+      [{ fieldPath: 'endpoints.azureOpenAI.groups.0.instanceName', value: 'elsewhere' }],
+      { getAppConfig },
+    );
+    const duplicate = await patch(
+      [
+        {
+          fieldPath: 'endpoints.azureOpenAI.groups',
+          value: [{ ...east, group: 'west', apiKey: 'west-key-literal', instanceName: 'west' }],
+        },
+      ],
+      { getAppConfig },
+    );
+    const upsert = mockRes();
+    await createHandlers({ getAppConfig }).applyConfigChanges(
+      mockReq({
+        params: { principalType: 'role', principalId: 'r1' },
+        body: {
+          ops: [{ op: 'upsertEntry', fieldPath: 'endpoints.azureOpenAI.groups', entry: mini }],
+        },
+      }),
+      upsert,
+    );
+    const { meta } = await getMeta();
+    return (
+      meta.rules.arrayMergeKeys['endpoints.azureOpenAI.groups'] === 'group' &&
+      JSON.stringify(merged.endpoints?.azureOpenAI?.modelNames) === '["gpt-4o","gpt-4o-mini"]' &&
+      merged.endpoints?.azureOpenAI?.groupMap?.east?.apiKey === 'east-key-literal' &&
+      indexed.statusCode === 400 &&
+      JSON.stringify(indexed.body?.issues).includes('indexed_merge_key_write') &&
+      duplicate.statusCode === 400 &&
+      JSON.stringify(duplicate.body?.issues) ===
+        JSON.stringify([
+          {
+            path: 'endpoints.azureOpenAI.groups',
+            segments: ['endpoints', 'azureOpenAI', 'groups'],
+            code: 'invalid_azure_groups',
+          },
+        ]) &&
+      upsert.statusCode === 200
+    );
+  },
+  async customParamsExpansion() {
+    const compact = {
+      defaultParamsEndpoint: 'anthropic',
+      paramDefinitions: [{ key: 'temperature', default: 0.2 }],
+    };
+    const gateway = {
+      name: 'Gateway',
+      apiKey: 'gateway-key-literal',
+      baseURL: 'https://gateway.example.com/v1',
+      models: { default: ['m1'] },
+      customParams: compact,
+    };
+    const yaml = { endpoints: { custom: [gateway] } };
+    const openRouter = {
+      name: 'OpenRouter',
+      apiKey: 'openrouter-key-literal',
+      baseURL: 'https://openrouter.example.com/v1',
+      models: { default: ['m2'] },
+    };
+    const layer = storedConfig({
+      endpoints: {
+        custom: [
+          {
+            name: 'Gateway',
+            customParams: { defaultParamsEndpoint: 'openAI', paramDefinitions: [{ key: 'top_p' }] },
+          },
+          openRouter,
+        ],
+      },
+    });
+    const service = serviceOver(yaml, [layer]);
+    const base = await service.getAppConfig({ baseOnly: true });
+    const merged = await service.getAppConfig({ role: 'r1' });
+    const served = (name: string) =>
+      merged.endpoints?.custom?.find((endpoint) => endpoint.name === name)?.customParams;
+    const invalid = await patch(
+      [
+        {
+          fieldPath: 'endpoints.custom',
+          value: [{ name: 'Gateway', customParams: { paramDefinitions: [{ key: 'notAParam' }] } }],
+        },
+      ],
+      { getAppConfig: jest.fn().mockResolvedValue(base) },
+    );
+    return (
+      JSON.stringify(base.config.endpoints?.custom?.[0]?.customParams) ===
+        JSON.stringify(compact) &&
+      base.endpoints?.custom?.[0]?.customParams?.paramDefinitions?.[0]?.optionType === 'custom' &&
+      served('Gateway')?.defaultParamsEndpoint === 'openAI' &&
+      served('Gateway')?.paramDefinitions?.[0]?.key === 'top_p' &&
+      served('Gateway')?.paramDefinitions?.[0]?.component != null &&
+      served('OpenRouter')?.paramDefinitions?.some((param) => param.key === 'promptCache') ===
+        true &&
+      invalid.statusCode === 400 &&
+      JSON.stringify(invalid.body?.issues) ===
+        JSON.stringify([
+          {
+            path: 'endpoints.custom.0.customParams',
+            segments: ['endpoints', 'custom', '0', 'customParams'],
+            code: 'invalid_param_definitions',
+          },
+        ])
+    );
+  },
+  async specInterfaceRederive() {
+    const yaml = { memory: { disabled: true } };
+    const spec = { name: 'spec', label: 'Spec', preset: { endpoint: 'openAI', model: 'gpt-4o' } };
+    const service = serviceOver(yaml, [
+      storedConfig({ modelSpecs: { list: [spec] }, memory: { disabled: false } }),
+    ]);
+    const base = await service.getAppConfig({ baseOnly: true });
+    const merged = await service.getAppConfig({ role: 'r1' });
+    const gateway = {
+      name: 'Gateway',
+      apiKey: 'gateway-key',
+      baseURL: 'https://gateway.example.com/v1',
+      models: { default: ['m1'] },
+    };
+    const hidden = await serviceOver(
+      {
+        endpoints: { custom: [gateway] },
+        modelSpecs: { list: [{ ...spec, preset: { endpoint: 'Gateway', model: 'm1' } }] },
+      },
+      [storedConfig({}, ['endpoints.custom'])],
+    ).getAppConfig({ role: 'r1' });
+    const unknown = await patch(
+      [
+        {
+          fieldPath: 'modelSpecs.list',
+          value: [{ ...spec, preset: { endpoint: 'Nowhere', model: 'm' } }],
+        },
+      ],
+      { getAppConfig: jest.fn().mockResolvedValue(base) },
+    );
+    const { modelSelect, parameters, presets } = merged.interfaceConfig ?? {};
+    return (
+      base.interfaceConfig?.parameters === true &&
+      [modelSelect, parameters, presets].every((value) => value === false) &&
+      !base.endpoints?.agents?.capabilities?.includes(AgentCapabilities.memory) &&
+      merged.endpoints?.agents?.capabilities?.includes(AgentCapabilities.memory) === true &&
+      hidden.modelSpecs === undefined &&
+      hidden.interfaceConfig?.parameters === true &&
+      unknown.statusCode === 400 &&
+      JSON.stringify(unknown.body?.issues) ===
+        JSON.stringify([
+          {
+            path: 'modelSpecs.list.0.preset.endpoint',
+            segments: ['modelSpecs', 'list', '0', 'preset', 'endpoint'],
+            code: 'unknown_spec_endpoint',
+          },
+        ])
+    );
+  },
+  async endpointRederive() {
+    const east = {
+      group: 'east',
+      apiKey: 'east-key-literal',
+      instanceName: 'east',
+      version: '2024-10-21',
+      deploymentName: 'gpt-4o',
+      models: { 'gpt-4o': true },
+    };
+    const yaml = {
+      endpoints: {
+        anthropic: {
+          vertex: {
+            projectId: 'yaml-project',
+            region: 'us-east5',
+            serviceKeyFile: '/keys/vertex.json',
+            models: ['claude-sonnet-4-6'],
+          },
+        },
+        azureOpenAI: { groups: [east] },
+      },
+    };
+    const layer = storedConfig({
+      endpoints: {
+        anthropic: {
+          vertex: {
+            models: ['claude-opus-4-6'],
+            serviceKeyFile: 'http://169.254.169.254/key',
+            region: 'elsewhere',
+          },
+        },
+        azureOpenAI: {
+          groups: [{ group: 'east', models: { 'gpt-4o-mini': { deploymentName: 'mini' } } }],
+        },
+      },
+    });
+    const served = async (rederiveEndpoints: boolean) =>
+      (await serviceOver(yaml, [layer], { rederiveEndpoints }).getAppConfig({ role: 'r1' }))
+        .endpoints;
+    const [offEndpoints, onEndpoints] = await Promise.all([served(false), served(true)]);
+    const [off, on] = [offEndpoints?.anthropic, onEndpoints?.anthropic];
+    const base = await serviceOver(yaml, []).getAppConfig({ baseOnly: true });
+    const skipped = mockRes();
+    await createHandlers({ getAppConfig: jest.fn().mockResolvedValue(base) }).applyConfigChanges(
+      mockReq({
+        params: { principalType: 'role', principalId: 'r1' },
+        body: {
+          ops: [
+            {
+              op: 'set',
+              fieldPath: 'endpoints.anthropic.vertex.serviceKeyFile',
+              value: '/etc/other.json',
+            },
+            {
+              op: 'set',
+              fieldPath: 'endpoints.anthropic.vertexConfig',
+              value: { serviceKeyFile: 'http://169.254.169.254/key' },
+            },
+          ],
+        },
+      }),
+      skipped,
+    );
+    /** Vertex AI turned on where librechat.yaml configures none. */
+    const unconfigured = await patch(
+      [{ fieldPath: 'endpoints.anthropic.vertex', value: { projectId: 'p-1' } }],
+      { getAppConfig: jest.fn().mockResolvedValue({ config: {} }) },
+    );
+    /** A variable librechat.yaml's disabled Vertex AI references, unset, once a profile enables it. */
+    const unset = await patch([{ fieldPath: 'endpoints.anthropic.vertex.enabled', value: true }], {
+      getAppConfig: jest.fn().mockResolvedValue({
+        config: {
+          endpoints: {
+            anthropic: { vertex: { enabled: false, projectId: '${VERTEX_UNSET_PROJECT}' } },
+          },
+        },
+      }),
+    });
+    /** A model name, sent as the deployment name as written, that only wraps a ${VAR} reference. */
+    process.env.VERTEX_PROBE_PROJECT = 'probe-project';
+    const wrapped = await patch(
+      [
+        {
+          fieldPath: 'endpoints.anthropic.vertex.models',
+          value: [
+            '${VERTEX_PROBE_PROJECT}/../../endpoints/5678:rawPredict#${VERTEX_PROBE_PROJECT}',
+          ],
+        },
+      ],
+      {
+        getAppConfig: jest.fn().mockResolvedValue({
+          config: {
+            endpoints: { anthropic: { vertex: { projectId: '${VERTEX_PROBE_PROJECT}' } } },
+          },
+        }),
+      },
+    ).finally(() => {
+      delete process.env.VERTEX_PROBE_PROJECT;
+    });
+    const metaOff = (await getMeta()).meta.features.endpointRederive;
+    const metaOn = (await getMeta(SWITCHES_ON)).meta.features.endpointRederive;
+    return (
+      metaOff === false &&
+      metaOn === true &&
+      JSON.stringify(off?.models) === '["claude-sonnet-4-6"]' &&
+      JSON.stringify(on?.models) === '["claude-opus-4-6"]' &&
+      JSON.stringify(offEndpoints?.azureOpenAI?.modelNames) === '["gpt-4o"]' &&
+      JSON.stringify(onEndpoints?.azureOpenAI?.modelNames) === '["gpt-4o","gpt-4o-mini"]' &&
+      on?.vertexConfig?.serviceKeyFile === '/keys/vertex.json' &&
+      on?.vertexConfig?.region === 'us-east5' &&
+      skipped.statusCode === 200 &&
+      JSON.stringify(
+        (skipped.body?.skipped as AdminConfigChangesResponse['skipped']).map(
+          ({ reason }) => reason,
+        ),
+      ) === '["base_only_path","derived_path"]' &&
+      [unset, unconfigured, wrapped].every(
+        (res) =>
+          res.statusCode === 400 &&
+          JSON.stringify(res.body?.issues) ===
+            JSON.stringify([
+              {
+                path: 'endpoints.anthropic.vertex',
+                segments: ['endpoints', 'anthropic', 'vertex'],
+                code: 'invalid_vertex_config',
+              },
+            ]),
+      )
     );
   },
   async resolvedApi() {
@@ -1961,13 +2333,151 @@ const FEATURE_PROBES: Record<AdminConfigFeatureFlag, () => Promise<boolean>> = {
     };
     return (await passes(true)) && !(await passes(false));
   },
+  async keyedTombstones() {
+    const name = 'api.example.com "v2" [eu]';
+    const hiddenPath = formatKeyedPath(['endpoints', 'custom'], name);
+    const entry = (entryName: string): Doc => ({
+      name: entryName,
+      apiKey: '${GATEWAY_KEY}',
+      baseURL: 'https://gateway.example.com/v1',
+      models: { default: ['m'] },
+      headers: { 'X-Team': 'yaml', 'X-Trace': 'on' },
+    });
+    const yaml = {
+      endpoints: { custom: [entry(name), entry('kept')] },
+      modelSpecs: { list: [{ name: 's', label: 'S', preset: { endpoint: name, model: 'm' } }] },
+    };
+    const base = {
+      config: yaml,
+      endpoints: { custom: structuredClone(yaml.endpoints.custom) },
+      modelSpecs: structuredClone(yaml.modelSpecs),
+    } as Partial<AppConfig> as AppConfig;
+    const store = createMapStore();
+    const handlers = createHandlers({
+      ...storeDeps(store),
+      getAppConfig: jest.fn().mockResolvedValue(base),
+    });
+    const principal = { principalType: PrincipalType.ROLE, principalId: 'r1' };
+    const run = async (
+      handler: 'tombstoneConfigField' | 'deleteConfigField' | 'applyConfigChanges',
+      init: MockReqInit,
+    ) => {
+      const res = mockRes();
+      await handlers[handler](mockReq({ params: principal, ...init }), res);
+      return res;
+    };
+
+    const hidden = await run('tombstoneConfigField', { body: { fieldPath: hiddenPath } });
+    const header = await run('applyConfigChanges', {
+      body: { ops: [{ op: 'tombstone', fieldPath: 'endpoints.custom["kept"].headers.X-Team' }] },
+    });
+    const record = await store.read(principal);
+    if (hidden.statusCode !== 200 || header.statusCode !== 200 || !record) {
+      return false;
+    }
+    const merged = mergeConfigOverrides(base, [record]);
+    const served = (merged.endpoints?.custom ?? []) as Doc[];
+    const hides =
+      served.length === 1 &&
+      served[0].name === 'kept' &&
+      JSON.stringify(served[0].headers) === JSON.stringify({ 'X-Trace': 'on' });
+
+    const { getAppConfig } = createAppConfigService({
+      loadBaseConfig: async () => base,
+      setCachedTools: async () => undefined,
+      getCache: () => ({
+        get: async () => undefined,
+        set: async () => undefined,
+        delete: async () => true,
+      }),
+      cacheKeys: { APP_CONFIG: 'app_config' },
+      getApplicableConfigs: jest.fn().mockResolvedValue([record]),
+      getUserPrincipals: jest.fn().mockResolvedValue([]),
+      overrideEnvAllowlist: 'GATEWAY_KEY',
+    });
+    const specsHidden = !(await getAppConfig({ role: 'r1' })).modelSpecs?.list?.length;
+
+    const refused = await Promise.all(
+      [
+        ['endpoints.custom["kept"', 'keyed_path'],
+        ['modelSpecs.list["s"]', 'keyed_path'],
+        ['endpoints.custom["kept"].name', 'merge_key'],
+        ['endpoints.custom.0.headers', 'inside_array'],
+      ].map(async ([fieldPath, reason]) => {
+        const res = await run('tombstoneConfigField', { body: { fieldPath } });
+        return res.statusCode === 400 && res.body?.reason === reason;
+      }),
+    );
+    const secret = await run('tombstoneConfigField', {
+      body: { fieldPath: 'endpoints.custom["kept"].apiKey' },
+    });
+
+    const restored = await run('deleteConfigField', { query: { fieldPath: 'endpoints.custom' } });
+    return (
+      JSON.stringify(record.tombstones) ===
+        JSON.stringify([hiddenPath, 'endpoints.custom["kept"].headers.X-Team']) &&
+      hides &&
+      specsHidden &&
+      refused.every(Boolean) &&
+      secret.statusCode === 400 &&
+      secret.body?.code === 'SECRET_PATH' &&
+      restored.statusCode === 200 &&
+      (await store.read(principal))?.tombstones.length === 0
+    );
+  },
+  async renameHints() {
+    const { meta } = await getMeta();
+    const draft = {
+      name: 'draft',
+      baseURL: 'https://gateway.example.com/v1',
+      models: { default: ['m'] },
+    };
+    const [stored] = encryptConfigSecretFields({
+      'endpoints.custom': [{ ...draft, apiKey: 'sk-endpoint-admin-secret' }],
+    })['endpoints.custom'] as Doc[];
+    const store = createMapStore();
+    const principal = { principalType: PrincipalType.ROLE, principalId: 'r1' };
+    await store.write(
+      principal,
+      {
+        principalModel: PrincipalModel.ROLE,
+        priority: 10,
+        isActive: true,
+        overrides: { endpoints: { custom: [stored] } } as ConfigDraft['overrides'],
+        tombstones: ['endpoints.custom["draft"].headers.X-Legacy'],
+      },
+      ABSENT_CONFIG_REVISION,
+    );
+    const res = mockRes();
+    await createHandlers(storeDeps(store)).patchConfigField(
+      mockReq({
+        params: principal,
+        body: {
+          entries: [{ fieldPath: 'endpoints.custom', value: [{ ...draft, name: 'final' }] }],
+          renames: [{ path: 'endpoints.custom', previousName: 'draft', name: 'final' }],
+        },
+      }),
+      res,
+    );
+    const record = await store.read(principal);
+    const [final] = (getIn(record?.overrides ?? {}, 'endpoints.custom') as Doc[] | undefined) ?? [];
+    return (
+      meta.rules.renameHintPaths.includes('endpoints.custom') &&
+      res.statusCode === 200 &&
+      final?.name === 'final' &&
+      final.apiKey === stored.apiKey &&
+      final.apiKeyPreview === stored.apiKeyPreview &&
+      JSON.stringify(record?.tombstones) ===
+        JSON.stringify(['endpoints.custom["final"].headers.X-Legacy'])
+    );
+  },
 };
 
 describe('meta feature flags', () => {
   it.each(Object.keys(FEATURE_PROBES) as AdminConfigFeatureFlag[])(
     '%s matches what the server does',
     async (flag) => {
-      const { meta } = await getMeta();
+      const { meta } = await getMeta(SWITCHES_ON);
       expect(meta.features[flag]).toBe(ADMIN_CONFIG_FEATURES[flag]);
       expect(meta.features[flag]).toBe(await FEATURE_PROBES[flag]());
     },

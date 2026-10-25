@@ -1,5 +1,5 @@
 import { isForcedTemporaryRetention } from 'librechat-data-provider';
-import type { TLangfuseUnavailableReason } from 'librechat-data-provider';
+import type { TStartupConfig, TLangfuseUnavailableReason } from 'librechat-data-provider';
 import type { AppConfig } from '@librechat/data-schemas';
 import { isFalseEnv, isTrueEnv } from './utils';
 import { normalizeString } from '~/utils/text';
@@ -95,6 +95,63 @@ export function isLangfuseTraceSampled(traceId: string): boolean {
   return traceIdAccumulation(traceId) < Math.floor(sampleRate * MAX_TRACE_ID_ACCUMULATION);
 }
 
+const DEFAULT_PROMPT_SYNC_TIMEOUT_MS = 10_000;
+const MIN_PROMPT_SYNC_TIMEOUT_MS = 1_000;
+const MAX_PROMPT_SYNC_TIMEOUT_MS = 60_000;
+
+export function isLangfusePromptSyncAvailable(): boolean {
+  return isTrueEnv(process.env.LANGFUSE_PROMPT_SYNC_AVAILABLE);
+}
+
+export function getLangfusePromptSyncTimeoutMs(): number {
+  const value = normalizeString(process.env.LANGFUSE_PROMPT_SYNC_TIMEOUT_MS);
+  if (value == null) {
+    return DEFAULT_PROMPT_SYNC_TIMEOUT_MS;
+  }
+
+  const timeoutMs = Number(value);
+  if (!Number.isFinite(timeoutMs)) {
+    return DEFAULT_PROMPT_SYNC_TIMEOUT_MS;
+  }
+  return Math.round(
+    Math.min(MAX_PROMPT_SYNC_TIMEOUT_MS, Math.max(MIN_PROMPT_SYNC_TIMEOUT_MS, timeoutMs)),
+  );
+}
+
+const DEFAULT_PROMPT_SYNC_LOCK_LEASE_MS = 300_000;
+const MIN_PROMPT_SYNC_LOCK_LEASE_MS = 60_000;
+const MAX_PROMPT_SYNC_LOCK_LEASE_MS = 3_600_000;
+
+/** Prompt sync lock lease, in milliseconds. Configured on librechat.yaml's
+ *  langfuse.promptSync.lockLeaseMs; clamps to the supported range and falls
+ *  back to the default when unset. */
+export function getLangfusePromptSyncLockLeaseMs(appConfig: AppConfig | undefined): number {
+  const leaseMs = appConfig?.langfuse?.promptSync?.lockLeaseMs;
+  if (leaseMs == null) {
+    return DEFAULT_PROMPT_SYNC_LOCK_LEASE_MS;
+  }
+  return Math.round(
+    Math.min(MAX_PROMPT_SYNC_LOCK_LEASE_MS, Math.max(MIN_PROMPT_SYNC_LOCK_LEASE_MS, leaseMs)),
+  );
+}
+
+const DEFAULT_PROMPT_SYNC_MAX_PAGES = 50;
+const MIN_PROMPT_SYNC_MAX_PAGES = 1;
+const MAX_PROMPT_SYNC_MAX_PAGES = 1000;
+
+/** Page cap for one sync request, in pages of up to 100 Langfuse prompts
+ *  each. Configured on librechat.yaml's langfuse.promptSync.maxPages;
+ *  clamps to the supported range and falls back to the default when unset. */
+export function getLangfusePromptSyncMaxPages(appConfig: AppConfig | undefined): number {
+  const maxPages = appConfig?.langfuse?.promptSync?.maxPages;
+  if (maxPages == null) {
+    return DEFAULT_PROMPT_SYNC_MAX_PAGES;
+  }
+  return Math.round(
+    Math.min(MAX_PROMPT_SYNC_MAX_PAGES, Math.max(MIN_PROMPT_SYNC_MAX_PAGES, maxPages)),
+  );
+}
+
 /** Whether the deployment offers Langfuse connection settings, and if not, why. */
 export type LangfuseConnectionAvailability =
   | { available: true }
@@ -127,4 +184,19 @@ export function getLangfuseConnectionAvailability(): LangfuseConnectionAvailabil
 
 export function isLangfuseConnectionAvailable(): boolean {
   return getLangfuseConnectionAvailability().available;
+}
+
+/** Settings remain available for prompt reads when trace connection editing is disabled. */
+export function isLangfuseSettingsAvailable(): boolean {
+  return isLangfuseConnectionAvailable() || isLangfusePromptSyncAvailable();
+}
+
+/** One permission check supplies both settings gates. Trace links keep their connection gate. */
+export function getLangfuseSettingsAccess(
+  canManage: boolean,
+): Pick<TStartupConfig, 'langfuseConnectionAccess' | 'langfusePromptSyncAccess'> {
+  return {
+    langfuseConnectionAccess: canManage && isLangfuseConnectionAvailable(),
+    langfusePromptSyncAccess: canManage && isLangfusePromptSyncAvailable(),
+  };
 }
