@@ -496,6 +496,23 @@ describe('loadDefaultInterface', () => {
     });
     expect(configured?.attribution).toEqual(attribution);
   });
+
+  it('passes configured sidebarLinks through loadDefaultInterface and omits it when unset', async () => {
+    const unset = await loadDefaultInterface({
+      config: {},
+      configDefaults: getConfigDefaults(),
+    });
+    expect(unset).not.toHaveProperty('sidebarLinks');
+
+    const sidebarLinks = [
+      { id: 'docs', label: 'Docs', href: '/docs/', icon: 'file-text' as const, target: '_blank' as const },
+    ];
+    const configured = await loadDefaultInterface({
+      config: { interface: { sidebarLinks } },
+      configDefaults: getConfigDefaults(),
+    });
+    expect(configured?.sidebarLinks).toEqual(sidebarLinks);
+  });
 });
 
 describe('running chat rename deployment fence', () => {
