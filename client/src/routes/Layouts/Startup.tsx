@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import type { TStartupConfig } from 'librechat-data-provider';
 import {
+  isSpaRoute,
+  withBasePath,
   DEFAULT_APP_TITLE,
   setDocumentTitle,
   getPostLoginRedirect,
@@ -52,6 +54,10 @@ export default function StartupLayout({ isAuthenticated }: { isAuthenticated?: b
     }
     const destination =
       getPostLoginRedirect(new URLSearchParams(window.location.search)) ?? '/c/new';
+    if (!isSpaRoute(destination)) {
+      window.location.replace(withBasePath(destination));
+      return;
+    }
     navigateRef.current(destination, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design; see comment above
   }, []);
