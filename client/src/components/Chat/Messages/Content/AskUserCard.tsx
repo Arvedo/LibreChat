@@ -51,10 +51,13 @@ export function isGateToolCall(rawName?: string, rawArgs?: unknown): boolean {
   const base = getBaseToolName(rawName);
   if (
     !base ||
-    base === 'ask_user' ||
-    base === 'rueckfrage' ||
+    base === 'ask_user_question' ||
     base === 'execute_code' ||
-    base === 'read_file'
+    base === 'read_file' ||
+    base === 'create_file' ||
+    base === 'edit_file' ||
+    base === 'set_memory' ||
+    base === 'delete_memory'
   ) {
     return false;
   }
@@ -79,8 +82,7 @@ export function isGateToolCall(rawName?: string, rawArgs?: unknown): boolean {
 }
 
 export function isInteractiveUserTool(rawName?: string, rawArgs?: unknown): boolean {
-  const base = getBaseToolName(rawName);
-  return base === 'ask_user' || base === 'rueckfrage' || isGateToolCall(rawName, rawArgs);
+  return isGateToolCall(rawName, rawArgs);
 }
 
 interface PersistedUserState {

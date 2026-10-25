@@ -377,34 +377,6 @@ export const toolCatalogSchema: ExtendedJsonSchema = {
   required: [],
 };
 
-export const askUserSchema: ExtendedJsonSchema = {
-  type: 'object',
-  properties: {
-    title: {
-      type: 'string',
-      description: 'Kurzer Titel des Dialogs im Chat.',
-    },
-    question: {
-      type: 'string',
-      description: 'Die Frage oder Bitte um Bestätigung an den Nutzer.',
-    },
-    options: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Liste von klickbaren Antwortoptionen.',
-    },
-    allow_custom: {
-      type: 'boolean',
-      description: 'Ob der Nutzer auch eine eigene Freitextantwort eingeben darf (Standard: true).',
-    },
-    details: {
-      type: 'object',
-      additionalProperties: { type: 'string' },
-      description: 'Optionale Schlüssel-Wert-Details zur Anzeige im Dialog.',
-    },
-  },
-  required: ['question'],
-};
 
 /** Tavily Search Results tool JSON schema */
 export const tavilySearchSchema: ExtendedJsonSchema = {
@@ -628,13 +600,6 @@ export const toolDefinitions: Record<string, ToolRegistryDefinition> = {
     description:
       'Durchsucht alle im System verfügbaren Werkzeuge (Tools & Plugins) und gibt Beschreibungen sowie Empfehlungen zurück.',
     schema: toolCatalogSchema,
-    toolType: 'builtin',
-  },
-  ask_user: {
-    name: 'ask_user',
-    description:
-      'Stellt dem Nutzer eine interaktive Rückfrage mit klickbaren Antwortoptionen im Chat und wartet auf die Auswahl.',
-    schema: askUserSchema,
     toolType: 'builtin',
   },
 };

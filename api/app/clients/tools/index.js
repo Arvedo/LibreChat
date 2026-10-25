@@ -17,7 +17,6 @@ const SearxngSearchTool = require('./structured/SearxngSearchTool');
 const CondenseContextTool = require('./structured/CondenseContextTool');
 const AgentCreatorTool = require('./structured/AgentCreatorTool');
 const FileReaderTool = require('./structured/FileReaderTool');
-const AskUserTool = require('./structured/AskUserTool');
 
 module.exports = {
   ...manifest,
@@ -38,5 +37,4 @@ module.exports = {
   CondenseContextTool,
   AgentCreatorTool,
   FileReaderTool,
-  AskUserTool,
 };

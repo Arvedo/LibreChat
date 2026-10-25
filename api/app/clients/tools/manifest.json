@@ -223,12 +223,5 @@
     "description": "Liest hochgeladene Dokumente (PDF, DOCX, XLSX, PPTX, TXT, CSV, Bilder mit OCR) im Chat-Workspace.",
     "icon": "assets/calculator.svg",
     "authConfig": []
-  },
-  {
-    "name": "Ask User",
-    "pluginKey": "ask_user",
-    "description": "Stellt dem Nutzer eine interaktive Rückfrage mit klickbaren Antwortoptionen im Chat.",
-    "icon": "assets/calculator.svg",
-    "authConfig": []
   }
 ]

@@ -63,7 +63,6 @@ const {
   CondenseContextTool,
   AgentCreatorTool,
   FileReaderTool,
-  AskUserTool,
 } = require('../');
 const {
   createMCPTool,
@@ -172,7 +171,6 @@ const loadTools = async ({
     agent_creator: AgentCreatorTool,
     create_agent: AgentCreatorTool,
     read_file: FileReaderTool,
-    ask_user: AskUserTool,
   };
 
   const customConstructors = {
