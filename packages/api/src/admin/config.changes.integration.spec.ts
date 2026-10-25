@@ -1385,6 +1385,82 @@ describe('POST …/changes: entries librechat.yaml owns', () => {
     expect((await storedDocument(params.principalId))!.tombstones).toEqual(['endpoints.agents']);
   });
 
+  it('skips a set or tombstone of a derived field and strips one a set above it carries', async () => {
+    const params = nextParams();
+    const stale = { projectId: 'x', serviceKeyFile: 'http://169.254.169.254/latest' };
+    const skippedOnly = [
+      { op: 'set', fieldPath: 'endpoints.anthropic.vertexConfig', value: stale },
+      { op: 'tombstone', fieldPath: 'endpoints.anthropic.vertexConfig' },
+      { op: 'set', fieldPath: 'endpoints.anthropic.vertexConfig.projectId', value: 'y' },
+    ];
+    for (const op of skippedOnly) {
+      const { status, body } = await send({ ops: [op] }, params);
+      expect(status).toBe(200);
+      expect(body.skipped).toEqual([
+        {
+          opIndex: 0,
+          op: op.op,
+          segments: op.fieldPath.split('.'),
+          reason: 'derived_path',
+        },
+      ]);
+      expect(body.applied).toEqual([]);
+    }
+    expect(await storedDocument(params.principalId)).toBeNull();
+
+    const { status, body } = await send(
+      {
+        ops: [
+          {
+            op: 'set',
+            fieldPath: 'endpoints.anthropic',
+            value: { titleModel: 'claude-haiku-4-5', vertexConfig: stale },
+          },
+        ],
+      },
+      params,
+    );
+
+    expect(status).toBe(200);
+    expect(body.skipped).toEqual([
+      {
+        opIndex: 0,
+        op: 'set',
+        segments: ['endpoints', 'anthropic', 'vertexConfig'],
+        reason: 'derived_path',
+      },
+    ]);
+    expect(body.applied.map((ref) => ref.opIndex)).toEqual([0]);
+    const stored = await storedDocument(params.principalId);
+    expect(stored!.overrides).toEqual({
+      endpoints: { anthropic: { titleModel: 'claude-haiku-4-5' } },
+    });
+    expect(stored!.tombstones).toEqual([]);
+  });
+
+  it('lets an unset clear a derived field an older server stored', async () => {
+    const params = nextParams();
+    await seedDocument(
+      params.principalId,
+      {
+        endpoints: { anthropic: { titleModel: 'claude-haiku-4-5', vertexConfig: { region: 'x' } } },
+      },
+      [],
+    );
+
+    const { status, body } = await send(
+      { ops: [{ op: 'unset', fieldPath: 'endpoints.anthropic.vertexConfig' }] },
+      params,
+    );
+
+    expect(status).toBe(200);
+    expect(body.skipped).toEqual([]);
+    expect(body.applied.map(({ opIndex, op }) => [opIndex, op])).toEqual([[0, 'unset']]);
+    expect((await storedDocument(params.principalId))!.overrides).toEqual({
+      endpoints: { anthropic: { titleModel: 'claude-haiku-4-5' } },
+    });
+  });
+
   it('refuses a rename under a YAML stdio server, but not an unset there', async () => {
     const params = nextParams();
     await seedDocument(
@@ -1435,6 +1511,79 @@ describe('POST …/changes: entries librechat.yaml owns', () => {
     );
     expect(status).toBe(400);
     expect(body).toMatchObject({ code: 'PROCESS_MCP_CONFIG', opIndex: 0 });
+  });
+});
+
+describe("POST …/changes: hiding or removing the endpoint a profile's model spec selects", () => {
+  const spec = (name: string, endpointName: string) => ({
+    name,
+    label: name,
+    preset: { endpoint: endpointName, model: 'm' },
+  });
+
+  it.each([
+    ['a keyed tombstone', { op: 'tombstone', fieldPath: 'endpoints.custom["yaml-endpoint"]' }],
+    ['a tombstone of the list', { op: 'tombstone', fieldPath: 'endpoints.custom' }],
+  ])("takes the spec with %s of librechat.yaml's endpoint", async (_case, op) => {
+    const params = nextParams();
+    const specs = [spec('yaml', 'yaml-endpoint'), spec('openai', 'openAI')];
+    expect(
+      (await patchFields([{ fieldPath: 'modelSpecs.list', value: specs }], params)).status,
+    ).toBe(200);
+
+    const { status, body } = await send({ ops: [op] }, params);
+
+    expect(status).toBe(200);
+    expect(body.applied.map(({ opIndex }) => opIndex)).toEqual([0]);
+    expect((await storedDocument(params.principalId))!.tombstones).toEqual([op.fieldPath]);
+  });
+
+  it.each([
+    ['removeEntry', { op: 'removeEntry', fieldPath: 'endpoints.custom', key: 'Router' }],
+    ['a keyed unset', { op: 'unset', fieldPath: 'endpoints.custom["Router"]' }],
+    ['a keyed tombstone', { op: 'tombstone', fieldPath: 'endpoints.custom["Router"]' }],
+    ['an unset of the list', { op: 'unset', fieldPath: 'endpoints.custom' }],
+  ])("takes the spec with %s of the profile's own endpoint", async (_case, op) => {
+    const params = nextParams();
+    const written = await patchFields(
+      [
+        { fieldPath: 'endpoints.custom', value: [endpoint('Router')] },
+        { fieldPath: 'modelSpecs.list', value: [spec('router', 'Router')] },
+      ],
+      params,
+    );
+    expect(written.status).toBe(200);
+
+    const { status, body } = await send({ ops: [op] }, params);
+
+    expect(status).toBe(200);
+    expect(body.applied.map(({ opIndex }) => opIndex)).toEqual([0]);
+    const { overrides } = (await storedDocument(params.principalId))!;
+    expect(valueAt(overrides, ['endpoints', 'custom']) ?? []).toEqual([]);
+    expect(valueAt(overrides, ['modelSpecs', 'list'])).toEqual([spec('router', 'Router')]);
+  });
+
+  it('still refuses a spec the batch writes for the endpoint it hides', async () => {
+    const params = nextParams();
+
+    const { status, body } = await send(
+      {
+        ops: [
+          { op: 'tombstone', fieldPath: 'endpoints.custom["yaml-endpoint"]' },
+          { op: 'set', fieldPath: 'modelSpecs.list', value: [spec('yaml', 'yaml-endpoint')] },
+        ],
+      },
+      params,
+    );
+
+    expect(status).toBe(400);
+    expect(body.issues).toEqual([
+      expect.objectContaining({
+        path: 'modelSpecs.list.0.preset.endpoint',
+        code: 'unknown_spec_endpoint',
+      }),
+    ]);
+    expect(await storedDocument(params.principalId)).toBeNull();
   });
 });
 
