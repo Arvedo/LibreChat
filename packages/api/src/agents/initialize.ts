@@ -2387,8 +2387,7 @@ export async function initializeAgent(
     const existing = capabilityToolNames.get(capability);
     capabilityToolNames.set(capability, existing ? [...existing, ...toolNames] : toolNames);
   };
-  const usesPluginFileCreator = (agent.tools ?? []).includes('file_creator');
-  if (effectiveCodeEnvAvailable && !usesPluginFileCreator) {
+  if (effectiveCodeEnvAvailable) {
     const codeExecResult = registerCodeExecutionTools({
       toolRegistry,
       toolDefinitions,
@@ -2462,7 +2461,7 @@ export async function initializeAgent(
     recordCapabilityToolNames(AgentCapabilities.skills, skillReadResult.toolNames);
   }
 
-  if ((effectiveCodeEnvAvailable && !usesPluginFileCreator) || skillAuthoringAvailable) {
+  if (effectiveCodeEnvAvailable || skillAuthoringAvailable) {
     const fileAuthoringResult = registerFileAuthoringTools({
       toolRegistry,
       toolDefinitions,

@@ -296,22 +296,6 @@ export const condenseContextSchema: ExtendedJsonSchema = {
   },
 };
 
-export const fileCreatorSchema: ExtendedJsonSchema = {
-  type: 'object',
-  properties: {
-    code: {
-      type: 'string',
-      description:
-        'Vollständiger, ausführbarer Python 3 Code. Speichere zu erstellende Dateien im aktuellen Arbeitsverzeichnis (/mnt/data).',
-    },
-    timeout: {
-      type: 'number',
-      description: 'Optionales Timeout in Sekunden (1-180, Standard: 60).',
-    },
-  },
-  required: ['code'],
-};
-
 export const agentCreatorSchema: ExtendedJsonSchema = {
   type: 'object',
   properties: {
@@ -609,13 +593,6 @@ export const toolDefinitions: Record<string, ToolRegistryDefinition> = {
     description:
       'Fasst den bisherigen Gesprächskontext strukturiert zusammen, um wichtige Ergebnisse, Fakten und offene Punkte bei langen Sitzungen festzuhalten.',
     schema: condenseContextSchema,
-    toolType: 'builtin',
-  },
-  file_creator: {
-    name: 'file_creator',
-    description:
-      'Führt Python 3 Code in einer isolierten Sandbox aus für exakte Berechnungen, Datenanalysen (pandas, openpyxl), Diagramme (matplotlib), OCR und die Erstellung von Dateien (PDF, DOCX, XLSX, PPTX, CSV, ZIP).',
-    schema: fileCreatorSchema,
     toolType: 'builtin',
   },
   agent_creator: {

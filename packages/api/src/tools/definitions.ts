@@ -199,18 +199,6 @@ export async function loadToolDefinitions(
       if (!isBuiltInTool(toolName)) {
         continue;
       }
-      if (toolName === 'execute_code' && tools.includes('file_creator')) {
-        const fcDef = getToolDefinition('file_creator');
-        if (fcDef) {
-          builtInToolDefs.push({
-            name: 'execute_code',
-            description:
-              'Führt Python 3 Code in einer isolierten Sandbox aus für exakte Berechnungen, Datenanalysen (pandas, openpyxl), Diagramme (matplotlib), OCR und Dateierstellung.',
-            parameters: fcDef.schema as JsonSchemaType | undefined,
-          });
-        }
-        continue;
-      }
       const registryDef = getToolDefinition(toolName);
       if (!registryDef) {
         continue;

@@ -12,7 +12,6 @@ const createOpenAIImageTools = require('./structured/OpenAIImageTools');
 const TavilySearchResults = require('./structured/TavilySearchResults');
 const createGeminiImageTool = require('./structured/GeminiImageGen');
 const ToolCatalogTool = require('./structured/ToolCatalogTool');
-const FileCreatorTool = require('./structured/FileCreatorTool');
 const WebScraperTool = require('./structured/WebScraperTool');
 const SearxngSearchTool = require('./structured/SearxngSearchTool');
 const CondenseContextTool = require('./structured/CondenseContextTool');
@@ -34,7 +33,6 @@ module.exports = {
   createOpenAIImageTools,
   createGeminiImageTool,
   ToolCatalogTool,
-  FileCreatorTool,
   WebScraperTool,
   SearxngSearchTool,
   CondenseContextTool,

@@ -45,7 +45,7 @@ class AgentCreatorTool extends Tool {
       .array(z.string())
       .optional()
       .describe(
-        'Liste der Tools, die der Agent nutzen darf. Verfügbare Werte: "searxng_search", "web_scraper", "file_creator", "execute_code", "read_file", "condense_context", "tool_catalog", "doc_search_mcp_document_search", "doc_sql_mcp_document_search", "agent_creator".',
+        'Liste der Tools, die der Agent nutzen darf. Verfügbare Werte: "searxng_search", "web_scraper", "execute_code", "read_file", "condense_context", "tool_catalog", "doc_search_mcp_document_search", "doc_sql_mcp_document_search", "agent_creator".',
       ),
     conversation_starters: z
       .array(z.string())

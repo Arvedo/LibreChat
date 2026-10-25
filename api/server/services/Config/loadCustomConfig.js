@@ -64,10 +64,15 @@ function applyExtensionManifests(rawConfig) {
       } else if (lower.includes('*') || lower.includes('all') || lower.includes('auto')) {
         active = maxExt < 0 ? installed : installed.slice(0, maxExt);
       } else {
+        const aliases = {
+          document_processor: ['document_processor', 'dateien'],
+          dateien: ['dateien', 'document_processor'],
+        };
         const matched = [];
         for (const id of norm) {
+          const candidates = aliases[id] || [id];
           for (const ext of installed) {
-            if (ext.id === id && !matched.includes(ext)) {
+            if (candidates.includes(ext.id) && !matched.includes(ext)) {
               matched.push(ext);
             }
           }
@@ -77,7 +82,15 @@ function applyExtensionManifests(rawConfig) {
     }
 
     const mcpServers = {};
+    const sidebarLinks = [];
     for (const ext of active) {
+      if (Array.isArray(ext.sidebar_links)) {
+        for (const link of ext.sidebar_links) {
+          if (link && typeof link === 'object' && link.href && link.label) {
+            sidebarLinks.push({ ...link });
+          }
+        }
+      }
       if (ext.mcp_servers && typeof ext.mcp_servers === 'object') {
         for (const [serverKey, serverCfg] of Object.entries(ext.mcp_servers)) {
           if (serverCfg && typeof serverCfg === 'object') {
@@ -192,6 +205,18 @@ function applyExtensionManifests(rawConfig) {
     }
     if (Object.keys(mcpServers).length > 0) {
       cfg.mcpServers = { ...(cfg.mcpServers || {}), ...mcpServers };
+    }
+    if (sidebarLinks.length > 0) {
+      cfg.interface = { ...(cfg.interface || {}) };
+      const existing = Array.isArray(cfg.interface.sidebarLinks)
+        ? [...cfg.interface.sidebarLinks]
+        : [];
+      for (const link of sidebarLinks) {
+        if (!existing.some((e) => (link.id && e.id === link.id) || e.href === link.href)) {
+          existing.push(link);
+        }
+      }
+      cfg.interface.sidebarLinks = existing;
     }
   } catch (_) {
     // Fallback to unmodified rawConfig if extension manifest parsing fails

@@ -134,6 +134,8 @@ export async function loadDefaultInterface({
     traceViewer: interfaceConfig?.traceViewer,
     /** Model & open-source attribution badge and license modal config (forwarded when configured). */
     attribution: interfaceConfig?.attribution,
+    sidebarLinks: interfaceConfig?.sidebarLinks,
+
     defaultPinnedTools: interfaceConfig?.defaultPinnedTools,
     peoplePicker: interfaceConfig?.peoplePicker,
     marketplace: interfaceConfig?.marketplace,

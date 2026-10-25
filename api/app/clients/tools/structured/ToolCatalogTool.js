@@ -22,7 +22,7 @@ class ToolCatalogTool extends Tool {
       .string()
       .optional()
       .describe(
-        'Die ID des Tools, für das Details abgerufen werden sollen (z.B. "file_creator", "searxng_search", "read_file", "agent_creator").',
+        'Die ID des Tools, für das Details abgerufen werden sollen (z.B. "execute_code", "searxng_search", "read_file", "agent_creator").',
       ),
   });
 

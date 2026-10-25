@@ -58,7 +58,6 @@ const {
   createGeminiImageTool,
   createOpenAIImageTools,
   ToolCatalogTool,
-  FileCreatorTool,
   WebScraperTool,
   SearxngSearchTool,
   CondenseContextTool,
@@ -167,7 +166,6 @@ const loadTools = async ({
     tavily_search_results_json: TavilySearchResults,
     tool_catalog: ToolCatalogTool,
     auto_tool: ToolCatalogTool,
-    file_creator: FileCreatorTool,
     web_scraper: WebScraperTool,
     searxng_search: SearxngSearchTool,
     condense_context: CondenseContextTool,
@@ -252,7 +250,6 @@ const loadTools = async ({
     flux: imageGenOptions,
     'stable-diffusion': imageGenOptions,
     gemini_image_gen: imageGenOptions,
-    file_creator: { agentId: agent?.id },
     read_file: { agentId: agent?.id },
     auto_tool: { name: 'auto_tool' },
     create_agent: { name: 'create_agent' },
@@ -334,15 +331,6 @@ const loadTools = async ({
     }
 
     if (tool === Tools.execute_code) {
-      if (agent?.tools?.includes('file_creator')) {
-        requestedTools[tool] = async () =>
-          new FileCreatorTool({
-            name: 'execute_code',
-            userId: user,
-            agentId: agent?.id,
-          });
-        continue;
-      }
       requestedTools[tool] = async () => {
         const codeExecutionContext =
           options.codeExecutionContext ??

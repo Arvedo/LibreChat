@@ -818,5 +818,40 @@ describe('loadCustomConfig', () => {
 
       expect(rawConfig.modelSpecs.list[0].subagents).toEqual({ enabled: true, allowSelf: true });
     });
+
+    it('merges sidebar_links from active extension manifests into interface.sidebarLinks', () => {
+      fs.writeFileSync(
+        path.join(tempExtDir, 'registry.json'),
+        JSON.stringify({
+          active_extensions: ['dateien', 'mailer'],
+        }),
+      );
+      const dateienDir = path.join(tempExtDir, 'dateien');
+      const mailerDir = path.join(tempExtDir, 'mailer');
+      fs.mkdirSync(dateienDir, { recursive: true });
+      fs.mkdirSync(mailerDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dateienDir, 'extension.json'),
+        JSON.stringify({
+          id: 'dateien',
+          sidebar_links: [{ id: 'dateien', label: 'Dateien', href: '/dateien/', icon: 'file-text' }],
+        }),
+      );
+      fs.writeFileSync(
+        path.join(mailerDir, 'extension.json'),
+        JSON.stringify({
+          id: 'mailer',
+          sidebar_links: [{ id: 'mailer', label: 'Mailer', href: '/mailer/', icon: 'mail' }],
+        }),
+      );
+
+      const rawConfig = { interface: {} };
+      loadCustomConfig.applyExtensionManifests(rawConfig);
+
+      expect(rawConfig.interface.sidebarLinks).toEqual([
+        { id: 'dateien', label: 'Dateien', href: '/dateien/', icon: 'file-text' },
+        { id: 'mailer', label: 'Mailer', href: '/mailer/', icon: 'mail' },
+      ]);
+    });
   });
 });

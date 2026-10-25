@@ -2476,7 +2476,7 @@ async function loadToolsForExecution({
 
   const requestedNonSpecialToolNames = toolNames.filter((name) => !specialToolNames.has(name));
   const allowedNonSpecialToolNames = requestedNonSpecialToolNames.filter((name) => {
-    if (name !== Tools.execute_code || agent?.tools?.includes('file_creator')) {
+    if (name !== Tools.execute_code) {
       return true;
     }
     const allowed = codeExecutionEnabled && toolRegistry?.has(Tools.execute_code) === true;

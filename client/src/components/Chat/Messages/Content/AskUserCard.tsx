@@ -53,7 +53,6 @@ export function isGateToolCall(rawName?: string, rawArgs?: unknown): boolean {
     !base ||
     base === 'ask_user' ||
     base === 'rueckfrage' ||
-    base === 'file_creator' ||
     base === 'execute_code' ||
     base === 'read_file'
   ) {

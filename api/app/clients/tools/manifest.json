@@ -183,13 +183,6 @@
     "authConfig": []
   },
   {
-    "name": "File Creator",
-    "pluginKey": "file_creator",
-    "description": "Führt Python 3 Code in einer isolierten Sandbox aus für Berechnungen, Datenanalysen und Dateierstellung.",
-    "icon": "assets/calculator.svg",
-    "authConfig": []
-  },
-  {
     "name": "Web Scraper",
     "pluginKey": "web_scraper",
     "description": "Liest den vollständigen Textinhalt einer Webseite oder URL aus.",
