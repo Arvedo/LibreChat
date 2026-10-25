@@ -3066,6 +3066,55 @@ export const isAllDataRetention = (mode?: RetentionMode | null): boolean =>
 export const isForcedTemporaryRetention = (mode?: RetentionMode | null): boolean =>
   mode === RetentionMode.EPHEMERAL;
 
+export const sidebarLinkIconSchema = z.enum([
+  'file-text',
+  'files',
+  'folder',
+  'mail',
+  'globe',
+  'external-link',
+  'book-open',
+  'database',
+  'terminal',
+  'wrench',
+  'calendar',
+  'chart-bar',
+  'shield',
+  'sparkles',
+]);
+
+export type TSidebarLinkIcon = z.infer<typeof sidebarLinkIconSchema>;
+
+/**
+ * Configuration for an external or companion web application link rendered
+ * in the left navigation rail and mobile sidebar drawer (`interface.sidebarLinks`).
+ */
+export const sidebarLinkSchema = z.object({
+  /** Stable identifier used for DOM keys and `data-testid` attributes. */
+  id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^[a-zA-Z0-9_-]+$/, 'id must contain only alphanumeric characters, hyphens, or underscores')
+    .optional(),
+  /** Accessible label and tooltip text displayed for the link. */
+  label: z.string().trim().min(1).max(80),
+  /** Root-relative path (e.g., `/docs/`) or `http(s)` URL opened when clicked. */
+  href: z
+    .string()
+    .trim()
+    .refine((v) => (v.startsWith('/') && !v.startsWith('//')) || /^https?:\/\//i.test(v), {
+      message: 'href must be a root-relative path or http(s) URL',
+    }),
+  /** Icon identifier rendered inside the sidebar button (default: `'external-link'`). */
+  icon: sidebarLinkIconSchema.optional().default('external-link'),
+  /** Whether to open the link in a new tab (`'_blank'`, default) or current tab (`'_self'`). */
+  target: z.enum(['_blank', '_self']).optional().default('_blank'),
+});
+
+export type TSidebarLinkConfig = z.infer<typeof sidebarLinkSchema>;
+
 export const interfaceSchema = z
   .object({
     theme: deploymentThemeSchema.optional(),
@@ -3172,6 +3221,8 @@ export const interfaceSchema = z
     fileSearch: z.boolean().optional(),
     fileCitations: z.boolean().optional(),
     traceViewer: traceViewerSchema.optional(),
+    /** Optional external or companion application links displayed in the left sidebar rail. */
+    sidebarLinks: z.array(sidebarLinkSchema).max(16).optional(),
     /** Tool keys (and `'mcp'` or an MCP server name) pinned to the prompt bar by default */
     defaultPinnedTools: z.array(z.string()).optional(),
     buildInfo: z.boolean().optional(),

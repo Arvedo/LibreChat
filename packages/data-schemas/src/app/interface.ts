@@ -132,6 +132,7 @@ export async function loadDefaultInterface({
     fileSearch: interfaceConfig?.fileSearch,
     fileCitations: interfaceConfig?.fileCitations,
     traceViewer: interfaceConfig?.traceViewer,
+    sidebarLinks: interfaceConfig?.sidebarLinks,
     defaultPinnedTools: interfaceConfig?.defaultPinnedTools,
     peoplePicker: interfaceConfig?.peoplePicker,
     marketplace: interfaceConfig?.marketplace,
