@@ -197,9 +197,16 @@
     "authConfig": []
   },
   {
+    "name": "Condense Results",
+    "pluginKey": "condense_results",
+    "description": "Komprimiert lange Recherche-Ergebnisse, Web-Inhalte oder Textdokumente auf die wesentlichen Kernpunkte.",
+    "icon": "assets/calculator.svg",
+    "authConfig": []
+  },
+  {
     "name": "Condense Context",
     "pluginKey": "condense_context",
-    "description": "Fasst den bisherigen Gesprächskontext strukturiert zusammen.",
+    "description": "Komprimiert lange Recherche-Ergebnisse (Alias fuer condense_results).",
     "icon": "assets/calculator.svg",
     "authConfig": []
   },

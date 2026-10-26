@@ -14,6 +14,7 @@ const createGeminiImageTool = require('./structured/GeminiImageGen');
 const ToolCatalogTool = require('./structured/ToolCatalogTool');
 const WebScraperTool = require('./structured/WebScraperTool');
 const SearxngSearchTool = require('./structured/SearxngSearchTool');
+const CondenseResultsTool = require('./structured/CondenseResultsTool');
 const CondenseContextTool = require('./structured/CondenseContextTool');
 const AgentCreatorTool = require('./structured/AgentCreatorTool');
 const FileReaderTool = require('./structured/FileReaderTool');
@@ -34,6 +35,7 @@ module.exports = {
   ToolCatalogTool,
   WebScraperTool,
   SearxngSearchTool,
+  CondenseResultsTool,
   CondenseContextTool,
   AgentCreatorTool,
   FileReaderTool,

@@ -256,7 +256,33 @@ export const webScraperSchema: ExtendedJsonSchema = {
   required: ['url'],
 };
 
-export const condenseContextSchema: ExtendedJsonSchema = {
+export const condenseResultsSchema: ExtendedJsonSchema = {
+  type: 'object',
+  properties: {
+    text: {
+      type: 'string',
+      description: 'Der lange Text oder die gesammelten Recherche-Ergebnisse, die komprimiert werden sollen.',
+    },
+    focus: {
+      type: 'string',
+      description: 'Optionaler Fokus: Welche Fakten, Zahlen oder Themen müssen unbedingt erhalten bleiben?',
+    },
+    mode: {
+      type: 'string',
+      enum: ['bullet_points', 'key_facts', 'brief_summary'],
+      description: 'Darstellungsform: "bullet_points", "key_facts" oder "brief_summary".',
+    },
+    target_ratio: {
+      type: 'number',
+      description: 'Ziel-Kompressionsrate (Standard: 0.3).',
+    },
+  },
+  required: ['text'],
+};
+
+export const condenseContextSchema: ExtendedJsonSchema = condenseResultsSchema;
+
+const _legacyCondenseContextSchema: ExtendedJsonSchema = {
   type: 'object',
   properties: {
     text: {
@@ -560,11 +586,18 @@ export const toolDefinitions: Record<string, ToolRegistryDefinition> = {
     schema: webScraperSchema,
     toolType: 'builtin',
   },
+  condense_results: {
+    name: 'condense_results',
+    description:
+      'Komprimiert und strukturiert lange Recherche-Ergebnisse, Webseiten-Inhalte oder Textdokumente auf die wesentlichen Kernpunkte und Fakten.',
+    schema: condenseResultsSchema,
+    toolType: 'builtin',
+  },
   condense_context: {
     name: 'condense_context',
     description:
-      'Fasst den bisherigen Gesprächskontext strukturiert zusammen, um wichtige Ergebnisse, Fakten und offene Punkte bei langen Sitzungen festzuhalten.',
-    schema: condenseContextSchema,
+      'Komprimiert und strukturiert lange Recherche-Ergebnisse, Webseiten-Inhalte oder Textdokumente (Alias für condense_results).',
+    schema: condenseResultsSchema,
     toolType: 'builtin',
   },
   agent_creator: {
