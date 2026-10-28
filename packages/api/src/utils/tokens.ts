@@ -679,14 +679,25 @@ export function matchModelName(
 }
 
 /**
- * Schema for OpenAI-compatible `/v1/models` entries that carry context-window
- * metadata. Supports OpenRouter/Helicone (`context_length` + `pricing`) as well
- * as local/self-hosted inference servers such as vLLM/SGLang (`max_model_len`)
- * and LM Studio/llama.cpp (`context_length` or `max_context_length`) where
- * `pricing` is omitted. Plain `/v1/models` responses without context metadata
+ * Schema for OpenAI-compatible /v1/models entries that carry context-window
+ * metadata. Supports OpenRouter/Helicone (context_length + pricing) as well
+ * as local/self-hosted inference servers such as vLLM/SGLang (max_model_len)
+ * and LM Studio/llama.cpp (context_length or max_context_length) where
+ * pricing is omitted. Plain /v1/models responses without context metadata
  * are rejected so built-in static token maps remain authoritative.
  */
-const modelSchema = z
+export interface FetchedModelData {
+  id: string;
+  pricing?: {
+    prompt: string;
+    completion: string;
+  };
+  context_length?: number;
+  max_model_len?: number;
+  max_context_length?: number;
+}
+
+export const modelSchema: z.ZodType<FetchedModelData> = z
   .object({
     id: z.string(),
     pricing: z
@@ -709,17 +720,6 @@ const modelSchema = z
         'At least one context length field (context_length, max_model_len, or max_context_length) is required',
     },
   );
-
-export interface FetchedModelData {
-  id: string;
-  pricing?: {
-    prompt: string;
-    completion: string;
-  };
-  context_length?: number;
-  max_model_len?: number;
-  max_context_length?: number;
-}
 
 export const inputSchema: z.ZodType<{ data: FetchedModelData[] }> = z.object({
   data: z.array(modelSchema),
