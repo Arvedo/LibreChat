@@ -81,6 +81,13 @@ jest.mock('~/components/Nav/AccountSettings', () => ({
   default: () => <div data-testid="account-settings" />,
 }));
 
+jest.mock('~/components/Nav/SidebarLinks', () => ({
+  __esModule: true,
+  default: ({ side, onNavigate }: { side?: string; onNavigate?: () => void }) => (
+    <div data-testid="mock-sidebar-links" data-side={side} onClick={() => onNavigate?.()} />
+  ),
+}));
+
 import ExpandedPanel from '../ExpandedPanel';
 
 const createLinks = (): NavLink[] => [
@@ -248,6 +255,20 @@ describe('ExpandedPanel', () => {
 
       expect(mockNewConversation).toHaveBeenCalledTimes(1);
       expect(getDefaultStore().get(activePanelAtom)).toBe('prompts');
+    });
+  });
+
+  describe('SidebarLinks rail integration', () => {
+    it('renders SidebarLinks with tooltip side and navigation callback', () => {
+      const onNavigate = jest.fn();
+      renderPanel({ onNavigate });
+
+      const sidebarLinks = screen.getByTestId('mock-sidebar-links');
+      expect(sidebarLinks).toBeInTheDocument();
+      expect(sidebarLinks).toHaveAttribute('data-side', 'right');
+
+      fireEvent.click(sidebarLinks);
+      expect(onNavigate).toHaveBeenCalledTimes(1);
     });
   });
 });
