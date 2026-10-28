@@ -193,6 +193,7 @@ function ExpandedPanel({
             onLeaveInsights={isInsightsRoute ? onLeaveInsights : undefined}
           />
         ))}
+        <SidebarLinks side={tooltipSide} onNavigate={onNavigate} />
       </div>
 
       <div className="mt-auto">
