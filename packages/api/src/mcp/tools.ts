@@ -24,6 +24,160 @@ import { isToolHiddenFromModel } from './apps';
 type DynamicStructuredToolFields = ConstructorParameters<typeof DynamicStructuredTool>[0];
 type DynamicStructuredToolFunction = DynamicStructuredToolFields['func'];
 
+/**
+ * Extracts the set of allowed JSON Schema primitive types declared on a property
+ * schema, including `type` arrays and `anyOf` / `oneOf` unions.
+ */
+function getSchemaExpectedTypes(propSchema: Record<string, unknown>): Set<string> {
+  const types = new Set<string>();
+  const rawType = propSchema.type;
+  if (typeof rawType === 'string') {
+    types.add(rawType);
+  } else if (Array.isArray(rawType)) {
+    for (const t of rawType) {
+      if (typeof t === 'string') {
+        types.add(t);
+      }
+    }
+  }
+  for (const unionKey of ['anyOf', 'oneOf'] as const) {
+    const branches = propSchema[unionKey];
+    if (Array.isArray(branches)) {
+      for (const branch of branches) {
+        if (branch && typeof branch === 'object') {
+          for (const t of getSchemaExpectedTypes(branch as Record<string, unknown>)) {
+            types.add(t);
+          }
+        }
+      }
+    }
+  }
+  return types;
+}
+
+/**
+ * Normalizes MCP tool arguments against the tool's JSON Schema before sending
+ * them to the MCP server. Open-weight and local models (e.g. Qwen, Llama,
+ * Mistral) frequently emit stringified numbers (`"10"`), booleans (`"true"`),
+ * JSON arrays/objects (`"[\"a\"]"`), or `null` for omitted optional parameters,
+ * which strict MCP server validators (Pydantic/Zod) reject.
+ */
+export function coerceMCPToolInput<T>(input: T, schema: unknown): T {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    !schema ||
+    typeof schema !== 'object' ||
+    !('properties' in schema)
+  ) {
+    return input;
+  }
+
+  const schemaObj = schema as {
+    properties?: Record<string, unknown>;
+    required?: unknown;
+  };
+  const properties = schemaObj.properties;
+  if (!properties || typeof properties !== 'object') {
+    return input;
+  }
+
+  const requiredSet = new Set<string>(
+    Array.isArray(schemaObj.required)
+      ? schemaObj.required.filter((k): k is string => typeof k === 'string')
+      : [],
+  );
+
+  const coerced: Record<string, unknown> = { ...(input as Record<string, unknown>) };
+
+  for (const [key, value] of Object.entries(coerced)) {
+    const rawProp = properties[key];
+    if (!rawProp || typeof rawProp !== 'object' || Array.isArray(rawProp)) {
+      continue;
+    }
+    const propSchema = rawProp as Record<string, unknown>;
+    const expectedTypes = getSchemaExpectedTypes(propSchema);
+    if (expectedTypes.size === 0) {
+      continue;
+    }
+
+    const isRequired = requiredSet.has(key);
+
+    // Strip `null` (or empty string on non-string fields) when the parameter is optional
+    if (!isRequired) {
+      if (value === null && !expectedTypes.has('null')) {
+        delete coerced[key];
+        continue;
+      }
+      if (value === '' && !expectedTypes.has('string') && !expectedTypes.has('null')) {
+        delete coerced[key];
+        continue;
+      }
+    }
+
+    if (typeof value === 'string' && !expectedTypes.has('string')) {
+      const trimmed = value.trim();
+
+      if ((expectedTypes.has('number') || expectedTypes.has('integer')) && trimmed !== '') {
+        const parsed = Number(trimmed);
+        if (
+          Number.isFinite(parsed) &&
+          (expectedTypes.has('number') || Number.isInteger(parsed))
+        ) {
+          coerced[key] = parsed;
+          continue;
+        }
+      }
+
+      if (expectedTypes.has('boolean')) {
+        const lower = trimmed.toLowerCase();
+        if (lower === 'true') {
+          coerced[key] = true;
+          continue;
+        }
+        if (lower === 'false') {
+          coerced[key] = false;
+          continue;
+        }
+      }
+
+      if (
+        (expectedTypes.has('array') && trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+        (expectedTypes.has('object') && trimmed.startsWith('{') && trimmed.endsWith('}'))
+      ) {
+        try {
+          const parsed: unknown = JSON.parse(trimmed);
+          if (
+            (expectedTypes.has('array') && Array.isArray(parsed)) ||
+            (expectedTypes.has('object') &&
+              parsed !== null &&
+              typeof parsed === 'object' &&
+              !Array.isArray(parsed))
+          ) {
+            coerced[key] =
+              expectedTypes.has('object') && !Array.isArray(parsed)
+                ? coerceMCPToolInput(parsed, propSchema)
+                : parsed;
+            continue;
+          }
+        } catch {
+          // Leave original value untouched if JSON parsing fails
+        }
+      }
+    } else if (
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      'properties' in propSchema
+    ) {
+      coerced[key] = coerceMCPToolInput(value, propSchema);
+    }
+  }
+
+  return coerced as T;
+}
+
 export function createMCPStructuredTool(
   func: (
     input: Parameters<DynamicStructuredToolFunction>[0],
@@ -44,12 +198,17 @@ export function createMCPStructuredTool(
           executionContext?: SubagentExecutionContext;
         };
       };
+      const coercedInput = coerceMCPToolInput(input, fields.schema);
       const approvalInvocation = await assertToolApprovalExecution(tool, invocation);
       const childConfig = patchConfig(config, { callbacks: runManager?.getChild() });
       const result = await AsyncLocalStorageProviderSingleton.runWithConfig(
         pickRunnableConfigKeys(childConfig),
         () =>
-          withToolApprovalTransport(invocation, () => func(input, childConfig), approvalInvocation),
+          withToolApprovalTransport(
+            invocation,
+            () => func(coercedInput, childConfig),
+            approvalInvocation,
+          ),
       );
       if (Array.isArray(result) && result.length === 2 && isMCPToolResultError(result)) {
         return [
