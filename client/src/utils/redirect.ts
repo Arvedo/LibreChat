@@ -156,6 +156,20 @@ export function withBasePath(path: string): string {
   }
 }
 
+/** Matches top-level route prefixes owned by the client-side React Router. */
+const SPA_ROUTE_PREFIX_RE =
+  /^\/(?:$|c(?:\/|$)|search(?:\/|$)|prompts(?:\/|$)|skills(?:\/|$)|insights(?:\/|$)|projects(?:\/|$)|agents(?:\/|$)|d(?:\/|$)|share(?:\/|$)|oauth(?:\/|$)|login(?:\/|$)|register(?:\/|$)|forgot-password(?:\/|$)|reset-password(?:\/|$)|verify(?:\/|$))/i;
+
+/**
+ * Returns true when `url` resolves to a route handled by the client-side SPA router.
+ * Same-origin paths outside the SPA router (e.g. reverse-proxied sub-paths) require
+ * a full document navigation (`window.location.replace`) rather than `navigate()`.
+ */
+export function isSpaRoute(url: string): boolean {
+  const path = url.split('?')[0].split('#')[0];
+  return SPA_ROUTE_PREFIX_RE.test(path);
+}
+
 export function persistRedirectToSession(value: string): void {
   if (isSafeRedirect(value)) {
     writeStoredRedirect(value);

@@ -6,6 +6,7 @@ import {
   peekPostLoginRedirect,
   isSafeRedirect,
   withBasePath,
+  isSpaRoute,
   SESSION_KEY,
 } from '../redirect';
 
@@ -421,5 +422,31 @@ describe('blocked session storage', () => {
     sessionStorage.clear();
 
     expect(getPostLoginRedirect(new URLSearchParams())).toBeNull();
+  });
+});
+
+describe('isSpaRoute', () => {
+  it('recognizes root and client-side React Router routes', () => {
+    expect(isSpaRoute('/')).toBe(true);
+    expect(isSpaRoute('/c/new')).toBe(true);
+    expect(isSpaRoute('/c/abc-123?model=gpt-4o')).toBe(true);
+    expect(isSpaRoute('/search')).toBe(true);
+    expect(isSpaRoute('/prompts')).toBe(true);
+    expect(isSpaRoute('/skills')).toBe(true);
+    expect(isSpaRoute('/insights')).toBe(true);
+    expect(isSpaRoute('/projects')).toBe(true);
+    expect(isSpaRoute('/agents')).toBe(true);
+    expect(isSpaRoute('/d/agents')).toBe(true);
+    expect(isSpaRoute('/share/xyz')).toBe(true);
+    expect(isSpaRoute('/oauth/success')).toBe(true);
+    expect(isSpaRoute('/login')).toBe(true);
+    expect(isSpaRoute('/register')).toBe(true);
+  });
+
+  it('returns false for same-origin reverse-proxied sub-paths outside React Router', () => {
+    expect(isSpaRoute('/admin/')).toBe(false);
+    expect(isSpaRoute('/docs/guide')).toBe(false);
+    expect(isSpaRoute('/files-app/?tab=all')).toBe(false);
+    expect(isSpaRoute('/custom-service#section')).toBe(false);
   });
 });
