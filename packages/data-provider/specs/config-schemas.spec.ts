@@ -2180,3 +2180,60 @@ describe('outboundTimeoutsSchema', () => {
     expect(outboundTimeoutsSchema.safeParse({ actionsMs: value }).success).toBe(false);
   });
 });
+
+describe('interfaceSchema attribution', () => {
+  it('leaves attribution undefined by default when omitted', () => {
+    const parsed = interfaceSchema.parse({});
+    expect(parsed.attribution).toBeUndefined();
+  });
+
+  it('parses configured attribution fields with defaults', () => {
+    const parsed = interfaceSchema.parse({
+      attribution: {
+        enabled: true,
+        anchor: ' ModelA ',
+        partners: [' PartnerB ', 'PartnerC'],
+      },
+    });
+    expect(parsed.attribution).toEqual({
+      enabled: true,
+      anchor: 'ModelA',
+      partners: ['PartnerB', 'PartnerC'],
+      includeOthers: true,
+      includeStandalone: true,
+      licensesUrl: '/licenses.json',
+    });
+  });
+
+  it('rejects protocol-relative or unsafe licensesUrl schemes', () => {
+    expect(
+      interfaceSchema.safeParse({
+        attribution: { enabled: true, anchor: 'ModelA', licensesUrl: '//evil.example/x.json' },
+      }).success,
+    ).toBe(false);
+    expect(
+      interfaceSchema.safeParse({
+        attribution: { enabled: true, anchor: 'ModelA', licensesUrl: 'javascript:alert(1)' },
+      }).success,
+    ).toBe(false);
+    expect(
+      interfaceSchema.safeParse({
+        attribution: {
+          enabled: true,
+          anchor: 'ModelA',
+          licensesUrl: 'https://example.org/licenses.json',
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('documents the same defaults in librechat.example.yaml', () => {
+    const example = readFileSync(join(__dirname, '../../../librechat.example.yaml'), 'utf8');
+    const defaults = interfaceSchema.parse({ attribution: {} }).attribution;
+    expect(example).toContain('# attribution:');
+    expect(example).toContain(`#   enabled: ${defaults?.enabled}`);
+    expect(example).toContain(`#   includeOthers: ${defaults?.includeOthers}`);
+    expect(example).toContain(`#   includeStandalone: ${defaults?.includeStandalone}`);
+    expect(example).toContain(`#   licensesUrl: '${defaults?.licensesUrl}'`);
+  });
+});

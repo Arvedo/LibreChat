@@ -123,6 +123,8 @@ export enum QueryKeys {
   agentQueuedTurns = 'agentQueuedTurns',
   /* Combined Pinned-section display order (favorites + pinned chats) */
   pinnedOrder = 'pinnedOrder',
+  /* Open-source and model attribution license catalog */
+  openSourceLicenses = 'openSourceLicenses',
 }
 
 // Dynamic query keys that require parameters

@@ -1,10 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Scale } from 'lucide-react';
 import copy from 'copy-to-clipboard';
 import { Constants } from 'librechat-data-provider';
 import type { TStartupConfig } from 'librechat-data-provider';
 import CopyButton from '~/components/Messages/Content/CopyButton';
+import LicensesModal from '~/components/Chat/LicensesModal';
 import { useGetStartupConfig } from '~/data-provider';
 import { useLocalize } from '~/hooks';
+import { cn } from '~/utils';
 
 const UNKNOWN_PLACEHOLDER = '—';
 
@@ -49,9 +52,14 @@ function About() {
   const localize = useLocalize();
   const { data: startupConfig } = useGetStartupConfig();
   const [isCopied, setIsCopied] = useState(false);
+  const [licensesOpen, setLicensesOpen] = useState(false);
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const licensesTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const buildInfo = startupConfig?.buildInfo;
+  const showBuildInfo = startupConfig?.interface?.buildInfo !== false;
+  const attribution = startupConfig?.interface?.attribution;
+  const showAttribution = attribution?.enabled === true;
   const version: string = Constants.VERSION;
 
   const diagnosticsBlob = useMemo(
@@ -82,36 +90,75 @@ function About() {
 
   return (
     <div className="text-text-primary flex flex-col text-sm">
-      <dl className="divide-border-light flex flex-col divide-y">
-        <Row label={localize('com_nav_about_version')} value={version} />
-        <Row
-          label={localize('com_nav_about_commit')}
-          value={buildInfo?.commitShort ?? UNKNOWN_PLACEHOLDER}
-        />
-        <Row
-          label={localize('com_nav_about_branch')}
-          value={buildInfo?.branch ?? UNKNOWN_PLACEHOLDER}
-        />
-        <Row
-          label={localize('com_nav_about_build_date')}
-          value={formatBuildDate(buildInfo?.buildDate)}
-        />
-      </dl>
+      {showBuildInfo && (
+        <>
+          <dl className="divide-border-light flex flex-col divide-y">
+            <Row label={localize('com_nav_about_version')} value={version} />
+            <Row
+              label={localize('com_nav_about_commit')}
+              value={buildInfo?.commitShort ?? UNKNOWN_PLACEHOLDER}
+            />
+            <Row
+              label={localize('com_nav_about_branch')}
+              value={buildInfo?.branch ?? UNKNOWN_PLACEHOLDER}
+            />
+            <Row
+              label={localize('com_nav_about_build_date')}
+              value={formatBuildDate(buildInfo?.buildDate)}
+            />
+          </dl>
 
-      <div className="border-border-light mt-4 flex flex-col items-start gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <p className="text-text-secondary min-w-0 flex-1 text-xs">
-          {localize('com_nav_about_diagnostics_description')}
-        </p>
-        <CopyButton
-          isCopied={isCopied}
-          onClick={handleCopy}
-          label={localize('com_nav_about_diagnostics_copy')}
-          className="border-border-light bg-surface-secondary text-text-primary hover:bg-surface-tertiary ms-0 shrink-0 gap-2 self-start rounded-lg border px-3 py-1.5 text-xs font-medium sm:self-auto"
-        />
-        <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {isCopied ? localize('com_ui_copied') : ''}
-        </span>
-      </div>
+          <div className="border-border-light mt-4 flex flex-col items-start gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <p className="text-text-secondary min-w-0 flex-1 text-xs">
+              {localize('com_nav_about_diagnostics_description')}
+            </p>
+            <CopyButton
+              isCopied={isCopied}
+              onClick={handleCopy}
+              label={localize('com_nav_about_diagnostics_copy')}
+              className="border-border-light bg-surface-secondary text-text-primary hover:bg-surface-tertiary ms-0 shrink-0 gap-2 self-start rounded-lg border px-3 py-1.5 text-xs font-medium sm:self-auto"
+            />
+            <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+              {isCopied ? localize('com_ui_copied') : ''}
+            </span>
+          </div>
+        </>
+      )}
+
+      {showAttribution && (
+        <div
+          className={cn(
+            'flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
+            showBuildInfo && 'border-border-light mt-4 border-t pt-4',
+          )}
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-text-primary text-sm font-medium">
+              {localize('com_ui_open_source_licenses')}
+            </span>
+            <p className="text-text-secondary text-xs">
+              {localize('com_ui_open_source_licenses_desc')}
+            </p>
+          </div>
+          <button
+            ref={licensesTriggerRef}
+            type="button"
+            onClick={() => setLicensesOpen(true)}
+            className="border-border-light bg-surface-secondary text-text-primary hover:bg-surface-tertiary inline-flex shrink-0 items-center gap-2 self-start rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors sm:self-auto"
+          >
+            <Scale className="size-3.5" aria-hidden="true" />
+            <span>{localize('com_ui_open_source_licenses_view')}</span>
+          </button>
+          {licensesOpen && (
+            <LicensesModal
+              open={licensesOpen}
+              onOpenChange={setLicensesOpen}
+              licensesUrl={attribution?.licensesUrl}
+              triggerRef={licensesTriggerRef}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

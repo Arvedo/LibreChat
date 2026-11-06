@@ -163,4 +163,25 @@ describe('About', () => {
       expect(status.textContent).toMatch(/com_ui_copied/);
     });
   });
+
+  describe('open-source licenses attribution', () => {
+    it('renders the open-source licenses section when attribution is enabled', () => {
+      mockUseGetStartupConfig.mockReturnValue({
+        data: {
+          buildInfo: populatedBuildInfo,
+          interface: {
+            buildInfo: false,
+            attribution: { enabled: true, anchor: 'ModelA' },
+          },
+        },
+      });
+      render(<About />);
+
+      expect(screen.queryByText(Constants.VERSION as string)).not.toBeInTheDocument();
+      expect(screen.getByText('com_ui_open_source_licenses')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /com_ui_open_source_licenses_view/i }),
+      ).toBeInTheDocument();
+    });
+  });
 });

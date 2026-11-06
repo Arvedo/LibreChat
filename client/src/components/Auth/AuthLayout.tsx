@@ -1,6 +1,7 @@
 import { ThemeSelector } from '@librechat/client';
 import { TStartupConfig } from 'librechat-data-provider';
 import { ErrorMessage } from '~/components/Auth/ErrorMessage';
+import AttributionBadge from '~/components/Chat/AttributionBadge';
 import { hasPublishedPolicies } from '~/utils/policies';
 import { TranslationKeys, useLocalize } from '~/hooks';
 import SocialLoginRender from './SocialLoginRender';
@@ -123,6 +124,7 @@ function AuthLayout({
           {statesConsentBelowProviders && <LegalConsent startupConfig={startupConfig} />}
         </div>
       </main>
+      <AttributionBadge />
       {!statesConsent && <Footer startupConfig={startupConfig} />}
     </div>
   );

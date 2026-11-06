@@ -117,3 +117,51 @@ describe('useSettingsContext connected accounts', () => {
     expect(hasConnect()).toBe(false);
   });
 });
+
+describe('useSettingsContext aboutEnabled', () => {
+  afterEach(() => {
+    mockStartup = undefined;
+  });
+
+  const isAboutEnabled = () =>
+    renderHook(() => useSettingsContext(), { wrapper }).result.current.aboutEnabled;
+
+  it('enables About by default when buildInfo is not disabled', () => {
+    mockStartup = { interface: {} };
+    expect(isAboutEnabled()).toBe(true);
+  });
+
+  it('disables About when buildInfo is false and attribution is not enabled', () => {
+    mockStartup = {
+      interface: {
+        buildInfo: false,
+        attribution: {
+          enabled: false,
+          anchor: 'ModelA',
+          partners: [],
+          includeOthers: true,
+          includeStandalone: true,
+          licensesUrl: '/licenses.json',
+        },
+      },
+    };
+    expect(isAboutEnabled()).toBe(false);
+  });
+
+  it('keeps About enabled when buildInfo is false but attribution is enabled', () => {
+    mockStartup = {
+      interface: {
+        buildInfo: false,
+        attribution: {
+          enabled: true,
+          anchor: 'ModelA',
+          partners: [],
+          includeOthers: true,
+          includeStandalone: true,
+          licensesUrl: '/licenses.json',
+        },
+      },
+    };
+    expect(isAboutEnabled()).toBe(true);
+  });
+});
